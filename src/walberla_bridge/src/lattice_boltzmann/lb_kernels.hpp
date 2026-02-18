@@ -69,7 +69,7 @@ template <typename FT = double, Arch AT = Arch::CPU> struct KernelTrait {
       pystencils::StreamCollideSweepLeesEdwardsDoublePrecisionAVX;
   using StreamModelTwoComponent =
       pystencils::ColorGradientStreamSweepDoublePrecisionAVX;
-  using CollideModelTwoComponent =
+  using CollisionModelTwoComponent =
       pystencils::ColorGradientCollideSweepDoublePrecisionAVX;
 #else
   using StreamCollisionModelThermalized =
@@ -78,7 +78,7 @@ template <typename FT = double, Arch AT = Arch::CPU> struct KernelTrait {
       pystencils::StreamCollideSweepLeesEdwardsDoublePrecision;
   using StreamModelTwoComponent =
       pystencils::ColorGradientStreamSweepDoublePrecision;
-  using CollideModelTwoComponent =
+  using CollisionModelTwoComponent =
       pystencils::ColorGradientCollideSweepDoublePrecision;
 #endif
   using InitialPDFsSetter = pystencils::InitialPDFsSetterDoublePrecision;
@@ -96,7 +96,7 @@ template <> struct KernelTrait<float, Arch::CPU> {
       pystencils::StreamCollideSweepLeesEdwardsSinglePrecisionAVX;
   using StreamModelTwoComponent =
       pystencils::ColorGradientStreamSweepSinglePrecisionAVX;
-  using CollideModelTwoComponent =
+  using CollisionModelTwoComponent =
       pystencils::ColorGradientCollideSweepSinglePrecisionAVX;
 #else
   using StreamCollisionModelThermalized =
@@ -105,7 +105,7 @@ template <> struct KernelTrait<float, Arch::CPU> {
       pystencils::StreamCollideSweepLeesEdwardsSinglePrecision;
   using StreamModelTwoComponent =
       pystencils::ColorGradientStreamSweepSinglePrecision;
-  using CollideModelTwoComponent =
+  using CollisionModelTwoComponent =
       pystencils::ColorGradientCollideSweepSinglePrecision;
 #endif
   using InitialPDFsSetter = pystencils::InitialPDFsSetterSinglePrecision;
