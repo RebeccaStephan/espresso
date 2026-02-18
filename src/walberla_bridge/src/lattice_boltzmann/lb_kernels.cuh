@@ -64,7 +64,7 @@ template <> struct KernelTrait<double, Arch::GPU> {
   using PackInfoVec = pystencils::PackInfoVecDoublePrecisionCUDA;
   using InitialPDFsSetterTwoComponent = pystencils::ColorGradientInitialPDFsSetterDoublePrecisionCUDA;
   using StreamModelTwoComponent = pystencils::ColorGradientStreamSweepDoublePrecisionCUDA;
-  using CollideModelTwoComponent = pystencils::ColorGradientCollideSweepDoublePrecisionCUDA;
+  using CollisionModelTwoComponent = pystencils::ColorGradientCollideSweepDoublePrecisionCUDA;
 };
 
 template <> struct KernelTrait<float, Arch::GPU> {
@@ -78,7 +78,7 @@ template <> struct KernelTrait<float, Arch::GPU> {
   using PackInfoVec = pystencils::PackInfoVecSinglePrecisionCUDA;
   using InitialPDFsSetterTwoComponent = pystencils::ColorGradientInitialPDFsSetterSinglePrecisionCUDA;
   using StreamModelTwoComponent = pystencils::ColorGradientStreamSweepSinglePrecisionCUDA;
-  using CollideModelTwoComponent = pystencils::ColorGradientCollideSweepSinglePrecisionCUDA;
+  using CollisionModelTwoComponent = pystencils::ColorGradientCollideSweepSinglePrecisionCUDA;
 };
 
 template <> struct BoundaryHandlingTrait<double, Arch::GPU> {
