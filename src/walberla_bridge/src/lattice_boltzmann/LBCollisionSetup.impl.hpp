@@ -30,7 +30,7 @@
 template <typename FloatType, lbmpy::Arch Architecture>
 FloatType
 LBWalberlaImpl<FloatType, Architecture>::shear_mode_relaxation_rate() const {
-  return FloatType{2} / (FloatType{6} * m_viscosity + FloatType{1});
+  return FloatType{2} / (FloatType{6} * m_viscosity[0] + FloatType{1});
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>
