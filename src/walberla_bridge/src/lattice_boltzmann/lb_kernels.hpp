@@ -86,6 +86,7 @@ template <typename FT = double, Arch AT = Arch::CPU> struct KernelTrait {
   using PackInfoPdf = pystencils::PackInfoPdfDoublePrecision;
   using PackInfoVec = pystencils::PackInfoVecDoublePrecision;
   using InitialPDFsSetterTwoComponent = pystencils::ColorGradientInitialPDFsSetterDoublePrecision;
+  using DynamicUBB = lbm::DynamicUBBDoublePrecision;
 };
 
 template <> struct KernelTrait<float, Arch::CPU> {
@@ -113,14 +114,6 @@ template <> struct KernelTrait<float, Arch::CPU> {
   using PackInfoPdf = pystencils::PackInfoPdfSinglePrecision;
   using PackInfoVec = pystencils::PackInfoVecSinglePrecision;
   using InitialPDFsSetterTwoComponent = pystencils::ColorGradientInitialPDFsSetterSinglePrecision;
-};
-
-template <typename FT = double, Arch AT = Arch::CPU>
-struct BoundaryHandlingTrait {
-  using DynamicUBB = lbm::DynamicUBBDoublePrecision;
-};
-
-template <> struct BoundaryHandlingTrait<float, Arch::CPU> {
   using DynamicUBB = lbm::DynamicUBBSinglePrecision;
 };
 

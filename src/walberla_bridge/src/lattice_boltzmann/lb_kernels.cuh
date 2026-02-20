@@ -65,6 +65,7 @@ template <> struct KernelTrait<double, Arch::GPU> {
   using InitialPDFsSetterTwoComponent = pystencils::ColorGradientInitialPDFsSetterDoublePrecisionCUDA;
   using StreamModelTwoComponent = pystencils::ColorGradientStreamSweepDoublePrecisionCUDA;
   using CollisionModelTwoComponent = pystencils::ColorGradientCollideSweepDoublePrecisionCUDA;
+  using DynamicUBB = lbm::DynamicUBBDoublePrecisionCUDA;
 };
 
 template <> struct KernelTrait<float, Arch::GPU> {
@@ -79,13 +80,6 @@ template <> struct KernelTrait<float, Arch::GPU> {
   using InitialPDFsSetterTwoComponent = pystencils::ColorGradientInitialPDFsSetterSinglePrecisionCUDA;
   using StreamModelTwoComponent = pystencils::ColorGradientStreamSweepSinglePrecisionCUDA;
   using CollisionModelTwoComponent = pystencils::ColorGradientCollideSweepSinglePrecisionCUDA;
-};
-
-template <> struct BoundaryHandlingTrait<double, Arch::GPU> {
-  using DynamicUBB = lbm::DynamicUBBDoublePrecisionCUDA;
-};
-
-template <> struct BoundaryHandlingTrait<float, Arch::GPU> {
   using DynamicUBB = lbm::DynamicUBBSinglePrecisionCUDA;
 };
 
