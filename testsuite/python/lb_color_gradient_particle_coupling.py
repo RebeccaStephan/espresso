@@ -34,7 +34,7 @@ import espressomd.lb
 
 
 DOMAIN_SIZE = 12
-AGRID = 1.0 #0.1 fails
+AGRID = 1.0
 TAU = 1.0
 RHO_0 = 1.0
 EPSILON = 1e-6
@@ -54,13 +54,18 @@ def tanh_interpolation(distances, radius, smoothing_width,
     ) + rho_outer
 
 
-def droplet_densities(grid_size, radius, smoothing_width, rho_0, epsilon):
-    """Generate initial density fields for a spherical droplet."""
+def droplet_densities(domain_size, radius, smoothing_width, rho_0, epsilon,
+                      agrid=1.0):
+    """Generate initial density fields for a spherical droplet.
+    All length parameters are in MD units."""
+    grid_size = int(domain_size / agrid)
     x = np.arange(grid_size) + 0.5
     xx, yy, zz = np.meshgrid(x, x, x, indexing="ij")
     center = grid_size / 2.0
     distances = np.sqrt((xx - center)**2 + (yy - center)**2
                         + (zz - center)**2)
+    radius = radius / agrid
+    smoothing_width = smoothing_width / agrid
 
     rho_a = tanh_interpolation(distances, radius, smoothing_width,
                                rho_0, epsilon * rho_0)
@@ -93,7 +98,7 @@ class ColorGradientParticleCouplingTest(ut.TestCase):
     def _init_droplet(self, lbf):
         """Set densities to a spherical droplet profile and initialize the PDFs."""
         rho_a, rho_b = droplet_densities(
-            DOMAIN_SIZE/AGRID, RADIUS, SMOOTHING_WIDTH, RHO_0, EPSILON)
+            DOMAIN_SIZE, RADIUS, SMOOTHING_WIDTH, RHO_0, EPSILON, agrid=AGRID)
         lbf[:, :, :].density = np.stack([rho_a, rho_b], axis=-1)
         lbf.init_two_component()
 
@@ -230,8 +235,7 @@ class ColorGradientParticleCouplingTest(ut.TestCase):
         self.system.thermostat.set_lb(LB_fluid=lbf, gamma=GAMMA, seed=42)
         self.system.integrator.run(1)
         force_pos = np.copy(p1.f)
-        print(force_pos)
-
+        
         # Reset
         self.system.part.clear()
         self.system.thermostat.turn_off()
@@ -288,20 +292,22 @@ class ColorGradientParticleCouplingTest(ut.TestCase):
                                  solvation_delta_mu=2.0)
         self.system.thermostat.set_lb(LB_fluid=lbf, gamma=GAMMA, seed=42)
 
-        self.system.integrator.run(10)
-
         total_momentum = []
 
-        for i in range(10):        
+        for i in range(10):
+            self.system.integrator.run(1)
             # Measure total momentum
-            particle_momentum=np.copy(p.v) * p.mass
+            particle_momentum = np.copy(p.v) * p.mass
             densities = np.copy(lbf[:, :, :].density)
             velocities = np.copy(lbf[:, :, :].velocity)
             rho_total = densities[:, :, :, 0] + densities[:, :, :, 1]
-            fluid_momentum=np.sum(rho_total[:, :, :, np.newaxis] * velocities, axis=(0, 1, 2))
+            # density is mass/volume in MD units; multiply by cell volume to get
+            # mass per cell so units match the MD particle momentum
+            fluid_momentum = np.sum(
+                rho_total[:, :, :, np.newaxis] * velocities * AGRID**3, axis=(0, 1, 2))
             total_momentum.append(particle_momentum + fluid_momentum)
 
-            if i >0:
+            if i > 0:
                 np.testing.assert_allclose(
                     total_momentum[-1], total_momentum[0], atol=1e-10,
                     err_msg="Momentum not conserved with solvation force coupling")

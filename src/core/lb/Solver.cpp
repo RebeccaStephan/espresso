@@ -401,10 +401,16 @@ void Solver::add_solvation_forces_at_pos(
       [&](auto &ptr) {
         std::vector<Utils::Vector3d> pos_lb;
         pos_lb.reserve(pos.size());
-        for (auto const &pos_md : pos) {
+        for (auto const &pos_md : pos)
           pos_lb.emplace_back(pos_md * m_conv.pos_to_lb);
-        }
-        ptr->add_solvation_forces_at_pos(pos_lb, delta_mus);
+        // delta_mu is energy in MD units; fluid kernel expects LB units:
+        // delta_mu_lb = delta_mu_md * tau^2/agrid^2
+        auto const delta_mu_conv = m_conv.force_to_lb * m_conv.pos_to_lb;
+        std::vector<double> delta_mus_lb;
+        delta_mus_lb.reserve(delta_mus.size());
+        for (auto const dm : delta_mus)
+          delta_mus_lb.emplace_back(dm * delta_mu_conv);
+        ptr->add_solvation_forces_at_pos(pos_lb, delta_mus_lb);
       },
       *impl->solver);
 }

@@ -62,19 +62,25 @@ def tanh_interpolation(distances, radius, smoothing_width,
     ) + rho_outer
 
 
-def droplet_densities(grid_size, radius, smoothing_width, rho_0, epsilon):
+def droplet_densities(domain_size, radius, smoothing_width, rho_0, epsilon,
+                      agrid=1.0):
     """
     Generate initial density fields for a spherical droplet.
+
+    All length parameters (domain_size, radius, smoothing_width) are in MD units.
 
     Returns:
         rho_a: solvent density (rho_0 outside, epsilon*rho_0 inside)
         rho_b: droplet density (epsilon*rho_0 outside, rho_0 inside)
     """
+    grid_size = int(domain_size / agrid)
     x = np.arange(grid_size) + 0.5
     xx, yy, zz = np.meshgrid(x, x, x, indexing="ij")
     center = grid_size / 2.0
     distances = np.sqrt((xx - center)**2 + (yy - center)**2
                         + (zz - center)**2)
+    radius = radius / agrid
+    smoothing_width = smoothing_width / agrid
 
     rho_a = tanh_interpolation(distances, radius, smoothing_width,
                                rho_0, epsilon * rho_0)
@@ -106,7 +112,7 @@ class ColorGradientLBTest(ut.TestCase):
         """Set densities to a spherical droplet profile and
         initialize the PDFs."""
         rho_a, rho_b = droplet_densities(
-            DOMAIN_SIZE, RADIUS, SMOOTHING_WIDTH, RHO_0, EPSILON)
+            DOMAIN_SIZE, RADIUS, SMOOTHING_WIDTH, RHO_0, EPSILON, agrid=AGRID)
         lbf[:, :, :].density = np.stack([rho_a, rho_b], axis=-1)
         lbf.init_two_component()
 
@@ -135,9 +141,9 @@ class ColorGradientLBTest(ut.TestCase):
     def test_slice_density_set_get(self):
         """Bulk slice density set/get should round-trip for two components."""
         lbf = self._create_lbf()
-        N = DOMAIN_SIZE
+        N = int(DOMAIN_SIZE / AGRID)
         rho_a, rho_b = droplet_densities(
-            N, RADIUS, SMOOTHING_WIDTH, RHO_0, EPSILON)
+            DOMAIN_SIZE, RADIUS, SMOOTHING_WIDTH, RHO_0, EPSILON, agrid=AGRID)
 
         # Set via bulk slice
         lbf[:, :, :].density = np.stack([rho_a, rho_b], axis=-1)
@@ -240,7 +246,7 @@ class ColorGradientLBTest(ut.TestCase):
         """After init_two_component, densities should match what was set."""
         lbf = self._create_lbf()
         rho_a, rho_b = droplet_densities(
-            DOMAIN_SIZE, RADIUS, SMOOTHING_WIDTH, RHO_0, EPSILON)
+            DOMAIN_SIZE, RADIUS, SMOOTHING_WIDTH, RHO_0, EPSILON, agrid=AGRID)
         lbf[:, :, :].density = np.stack([rho_a, rho_b], axis=-1)
         lbf.init_two_component()
 
@@ -264,9 +270,9 @@ class ColorGradientLBTest(ut.TestCase):
     def test_bulk_slice_init_matches_node_init(self):
         """Bulk slice density init should match per-node init."""
         lbf = self._create_lbf()
-        N = DOMAIN_SIZE
+        N = int(DOMAIN_SIZE / AGRID)
         rho_a, rho_b = droplet_densities(
-            N, RADIUS, SMOOTHING_WIDTH, RHO_0, EPSILON)
+            DOMAIN_SIZE, RADIUS, SMOOTHING_WIDTH, RHO_0, EPSILON, agrid=AGRID)
 
         # Init via bulk slice
         lbf[:, :, :].density = np.stack([rho_a, rho_b], axis=-1)
