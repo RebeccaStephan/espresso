@@ -221,6 +221,10 @@ struct Solver : public System::Leaf<Solver> {
   std::vector<Utils::Vector3d> get_coupling_interpolated_color_gradients(
       std::vector<Utils::Vector3d> const &pos) const;
 
+  std::vector<Utils::Vector3d> get_coupling_solvation_particle_forces(
+      std::vector<Utils::Vector3d> const &pos,
+      std::vector<double> const &delta_mus) const;
+
   /**
    * @brief Add a force densities to the fluid at the given positions.
    * Special method used only for particle coupling.

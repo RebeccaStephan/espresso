@@ -49,6 +49,10 @@ public:
   virtual void
   add_solvation_forces_at_pos(std::vector<Utils::Vector3d> const &positions,
                               std::vector<double> const &delta_mus) = 0;
+  virtual std::vector<Utils::Vector3d>
+  get_solvation_particle_forces_at_pos(
+      std::vector<Utils::Vector3d> const &pos,
+      std::vector<double> const &delta_mus) = 0;
 
   // per-component density accessors
   virtual std::optional<std::array<double, 2>>

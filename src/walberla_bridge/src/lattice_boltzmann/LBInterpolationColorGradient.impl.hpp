@@ -193,7 +193,7 @@ auto LBWalberlaImplColorGradient<
     /* Accumulate grad(rho_a) and grad(rho_b) at particle position using
      * bspline_3d_gradient*/
     Utils::Vector3d grad_rho_a{}, grad_rho_b{};
-    Utils::Interpolation::bspline_3d_gradient<2>(
+    Utils::Interpolation::bspline_3d_gradient<3>( // SOLVATION_BSPLINE_ORDER
         pos,
         [&](std::array<int, 3> const node, Utils::Vector3d const &grad_weight) {
           auto block = get_block_extended(lattice, node, 1u);
@@ -218,7 +218,7 @@ auto LBWalberlaImplColorGradient<
 
     /* Accumulate rho_a and rho_b at particle position using bspline_3d*/
     double rho_a{}, rho_b{};
-    Utils::Interpolation::bspline_3d<2>(
+    Utils::Interpolation::bspline_3d<3>( // SOLVATION_BSPLINE_ORDER
         pos,
         [&](std::array<int, 3> const node, double weight) {
           auto block = get_block_extended(lattice, node, 1u);
@@ -392,6 +392,83 @@ LBWalberlaImplColorGradient<FloatType, Architecture>::
   }
 #endif
   return color_gradient;
+}
+
+template <typename FloatType, lbmpy::Arch Architecture>
+auto LBWalberlaImplColorGradient<FloatType, Architecture>::
+    make_solvation_particle_force_kernel() const {
+  auto const &lattice = *m_lattice;
+  auto const &blocks = *lattice.get_blocks();
+  assert(lattice.get_ghost_layers() == 1u);
+  return [&](Utils::Vector3d const &pos, double delta_mu) -> Utils::Vector3d {
+    if (not get_block_extended(lattice, pos, 1u))
+      return {};
+    auto const grid_spacing = Utils::Vector3d::broadcast(1.);
+    auto const offset = Utils::Vector3d::broadcast(.5);
+    Utils::Vector3d grad_rho_a{}, grad_rho_b{};
+    Utils::Interpolation::bspline_3d_gradient<3>( // SOLVATION_BSPLINE_ORDER
+        pos,
+        [&](std::array<int, 3> const node, Utils::Vector3d const &grad_weight) {
+          auto block = get_block_extended(lattice, node, 1u);
+          if (!block)
+            return;
+          auto cell = to_cell(node);
+          blocks.transformGlobalToBlockLocalCell(cell, *block);
+          auto const cell_rho_a = static_cast<double>(
+              block->template uncheckedFastGetData<ScalarField>(m_rho_field_id[0])->get(cell));
+          auto const cell_rho_b = static_cast<double>(
+              block->template uncheckedFastGetData<ScalarField>(m_rho_field_id[1])->get(cell));
+          grad_rho_a += cell_rho_a * grad_weight;
+          grad_rho_b += cell_rho_b * grad_weight;
+        },
+        grid_spacing, offset);
+    double rho_a{}, rho_b{};
+    Utils::Interpolation::bspline_3d<3>( // SOLVATION_BSPLINE_ORDER
+        pos,
+        [&](std::array<int, 3> const node, double weight) {
+          auto block = get_block_extended(lattice, node, 1u);
+          if (!block)
+            return;
+          auto cell = to_cell(node);
+          blocks.transformGlobalToBlockLocalCell(cell, *block);
+          auto const cell_rho_a = static_cast<double>(
+              block->template uncheckedFastGetData<ScalarField>(m_rho_field_id[0])->get(cell));
+          auto const cell_rho_b = static_cast<double>(
+              block->template uncheckedFastGetData<ScalarField>(m_rho_field_id[1])->get(cell));
+          rho_a += cell_rho_a * weight;
+          rho_b += cell_rho_b * weight;
+        },
+        grid_spacing, offset);
+    auto const total_rho = rho_a + rho_b;
+    if (total_rho == 0.)
+      return {};
+    auto const inv_rho_sq = 1. / (total_rho * total_rho);
+    return -delta_mu * inv_rho_sq * (rho_b * grad_rho_a - rho_a * grad_rho_b);
+  };
+}
+
+template <typename FloatType, lbmpy::Arch Architecture>
+std::vector<Utils::Vector3d>
+LBWalberlaImplColorGradient<FloatType, Architecture>::
+    get_solvation_particle_forces_at_pos(
+        std::vector<Utils::Vector3d> const &pos,
+        std::vector<double> const &delta_mus) {
+  assert(pos.size() == delta_mus.size());
+  if (pos.empty())
+    return {};
+  std::vector<Utils::Vector3d> forces{};
+  forces.reserve(pos.size());
+  if constexpr (Architecture == lbmpy::Arch::CPU) {
+    auto const kernel = make_solvation_particle_force_kernel();
+    for (std::size_t i = 0ul; i < pos.size(); ++i)
+      forces.emplace_back(kernel(pos[i], delta_mus[i]));
+  }
+#if defined(__CUDACC__) and defined(WALBERLA_BUILD_WITH_CUDA)
+  if constexpr (Architecture == lbmpy::Arch::GPU)
+    throw std::runtime_error(
+        "Solvation particle force not implemented on GPU");
+#endif
+  return forces;
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>

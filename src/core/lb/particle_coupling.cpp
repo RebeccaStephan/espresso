@@ -74,11 +74,6 @@ static Utils::Vector3d lb_drag_force(Particle const &p, double lb_gamma,
   return Utils::hadamard_product(gamma, v_drift - p.v());
 }
 
-static Utils::Vector3d
-lb_particle_solvation_force(Particle const &p,
-                            Utils::Vector3d const &grad_phi) {
-  return -0.5 * p.solvation_delta_mu() * grad_phi;
-}
 
 Utils::Vector3d lb_drag_force(LB::Solver const &lb, double lb_gamma,
                               Particle const &p,
@@ -225,6 +220,7 @@ void ParticleCoupling::kernel(std::vector<Particle *> const &particles) {
   auto const halo_lower_corner = m_local_box.my_left() - halo_vec;
   auto const halo_upper_corner = m_local_box.my_right() + halo_vec;
   std::vector<Utils::Vector3d> positions_velocity_coupling;
+  std::vector<double> solvation_delta_mus_for_vel_coupling;
   std::vector<Utils::Vector3d> positions_force_coupling;
   std::vector<Utils::Vector3d> force_coupling_forces;
   std::vector<Utils::Vector3d> solvation_positions;
@@ -255,6 +251,9 @@ void ParticleCoupling::kernel(std::vector<Particle *> const &particles) {
            auto const &pos : std::views::counted(end - span_size, span_size)) {
         if (pos >= halo_lower_corner and pos < halo_upper_corner) {
           positions_velocity_coupling.emplace_back(pos);
+          if (m_lb.color_gradient())
+            solvation_delta_mus_for_vel_coupling.emplace_back(
+                p.solvation_delta_mu());
           coupling_mode = particle_force;
           break;
         }
@@ -284,13 +283,12 @@ void ParticleCoupling::kernel(std::vector<Particle *> const &particles) {
       positions_force_coupling_counter.begin();
 
   auto *color_gradient_lb = m_lb.color_gradient();
-  std::vector<Utils::Vector3d> interpolated_color_gradients;
+  std::vector<Utils::Vector3d> solvation_particle_forces;
   if (color_gradient_lb) {
-    interpolated_color_gradients =
-        m_lb.get_coupling_interpolated_color_gradients(
-            positions_velocity_coupling);
+    solvation_particle_forces = m_lb.get_coupling_solvation_particle_forces(
+        positions_velocity_coupling, solvation_delta_mus_for_vel_coupling);
   }
-  auto it_interpolated_color_gradients = interpolated_color_gradients.begin();
+  auto it_solvation_particle_forces = solvation_particle_forces.begin();
 
   for (auto ptr : coupled_particles) {
     auto &p = *ptr;
@@ -321,9 +319,7 @@ void ParticleCoupling::kernel(std::vector<Particle *> const &particles) {
         force_on_particle = drag_force + random_force;
         // Solvation force
         if (color_gradient_lb && p.solvation_delta_mu() != 0.) {
-          auto const &grad_phi = *it_interpolated_color_gradients;
-          solvation_force_on_particle +=
-              lb_particle_solvation_force(p, grad_phi);
+          solvation_force_on_particle += *it_solvation_particle_forces;
           solvation_positions.emplace_back(*it_positions_velocity_coupling);
           solvation_delta_mus.emplace_back(p.solvation_delta_mu());
         }
@@ -331,7 +327,7 @@ void ParticleCoupling::kernel(std::vector<Particle *> const &particles) {
       ++it_interpolated_velocities;
       ++it_positions_velocity_coupling;
       if (color_gradient_lb) {
-        ++it_interpolated_color_gradients;
+        ++it_solvation_particle_forces;
       }
     }
     auto force_on_fluid = -force_on_particle;

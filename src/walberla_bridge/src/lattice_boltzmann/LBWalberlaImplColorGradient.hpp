@@ -647,6 +647,9 @@ private:
   /** @brief Return a B-spline interpolation kernel for color gradient readout
    * in two component LB. */
   auto make_color_gradient_interpolation_kernel() const;
+  /** @brief Return a B-spline gradient kernel for solvation force on particle,
+   * consistent with make_solvation_force_interpolation_kernel. */
+  auto make_solvation_particle_force_kernel() const;
 
 public:
   bool add_force_at_pos(Utils::Vector3d const &pos,
@@ -662,6 +665,10 @@ public:
 
   std::vector<Utils::Vector3d>
   get_color_gradients_at_pos(std::vector<Utils::Vector3d> const &pos) override;
+  std::vector<Utils::Vector3d>
+  get_solvation_particle_forces_at_pos(
+      std::vector<Utils::Vector3d> const &pos,
+      std::vector<double> const &delta_mus) override;
 
 public:
   // ---- Boundary Handling (leaf-specific helpers) ----

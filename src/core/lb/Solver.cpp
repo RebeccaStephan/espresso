@@ -355,6 +355,25 @@ std::vector<Utils::Vector3d> Solver::get_coupling_interpolated_color_gradients(
   return res;
 }
 
+std::vector<Utils::Vector3d> Solver::get_coupling_solvation_particle_forces(
+    std::vector<Utils::Vector3d> const &pos,
+    std::vector<double> const &delta_mus) const {
+  auto *cg = const_cast<LBWalberlaColorGradientBase *>(color_gradient());
+  if (cg == nullptr) {
+    throw std::runtime_error(
+        "get_coupling_solvation_particle_forces requires a two-component "
+        "(color-gradient) LB solver");
+  }
+  std::vector<Utils::Vector3d> pos_lb;
+  pos_lb.reserve(pos.size());
+  for (auto const &pos_md : pos)
+    pos_lb.emplace_back(pos_md * m_conv.pos_to_lb);
+  auto res = cg->get_solvation_particle_forces_at_pos(pos_lb, delta_mus);
+  for (auto &f : res)
+    f *= m_conv.pos_to_lb; // LB gradient units to MD: F_md = F_lb / agrid
+  return res;
+}
+
 void Solver::add_forces_at_pos(std::vector<Utils::Vector3d> const &pos,
                                std::vector<Utils::Vector3d> const &forces) {
   std::visit(
