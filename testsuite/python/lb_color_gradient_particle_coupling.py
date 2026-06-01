@@ -294,7 +294,7 @@ class ColorGradientParticleCouplingTest(ut.TestCase):
 
         total_momentum = []
 
-        for i in range(10):
+        for i in range(1000):
             self.system.integrator.run(1)
             # Measure total momentum
             particle_momentum = np.copy(p.v) * p.mass
