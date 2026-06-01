@@ -216,6 +216,17 @@ struct Solver : public System::Leaf<Solver> {
       std::vector<Utils::Vector3d> const &pos) const;
 
   /**
+   * @brief Compute solvation forces on particles in MD units, using B-spline
+   * gradient of density fields for consistency with the fluid solvation force.
+   * @param pos       Positions in MD units.
+   * @param delta_mus Solvation chemical potential differences.
+   * @retval Solvation forces in MD units.
+   */
+  std::vector<Utils::Vector3d> get_coupling_solvation_particle_forces(
+      std::vector<Utils::Vector3d> const &pos,
+      std::vector<double> const &delta_mus) const;
+
+  /**
    * @brief Add a force densities to the fluid at the given positions.
    * Special method used only for particle coupling.
    * @param pos            Positions in MD at which the forces are applied.

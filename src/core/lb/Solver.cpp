@@ -321,6 +321,25 @@ std::vector<Utils::Vector3d> Solver::get_coupling_interpolated_color_gradients(
       *impl->solver);
 }
 
+std::vector<Utils::Vector3d> Solver::get_coupling_solvation_particle_forces(
+    std::vector<Utils::Vector3d> const &pos,
+    std::vector<double> const &delta_mus) const {
+  return std::visit(
+      [&](auto &ptr) {
+        std::vector<Utils::Vector3d> pos_lb;
+        pos_lb.reserve(pos.size());
+        for (auto const &pos_md : pos) {
+          pos_lb.emplace_back(pos_md * m_conv.pos_to_lb);
+        }
+        auto res = ptr->get_solvation_particle_forces_at_pos(pos_lb, delta_mus);
+        for (auto &f : res) {
+          f *= m_conv.pos_to_lb; // LB gradient units to MD: F_md = F_lb / agrid
+        }
+        return res;
+      },
+      *impl->solver);
+}
+
 void Solver::add_forces_at_pos(std::vector<Utils::Vector3d> const &pos,
                                std::vector<Utils::Vector3d> const &forces) {
   std::visit(
@@ -365,10 +384,16 @@ void Solver::add_solvation_forces_at_pos(std::vector<Utils::Vector3d> const &pos
       [&](auto &ptr) {
         std::vector<Utils::Vector3d> pos_lb;
         pos_lb.reserve(pos.size());
-        for (auto const &pos_md : pos) {
+        for (auto const &pos_md : pos)
           pos_lb.emplace_back(pos_md * m_conv.pos_to_lb);
-        }
-        ptr->add_solvation_forces_at_pos(pos_lb, delta_mus);
+        // delta_mu is an energy (force*length in MD units); the fluid kernel
+        // expects it in LB units: delta_mu_lb = delta_mu_md * tau²/agrid²
+        auto const delta_mu_conv = m_conv.force_to_lb * m_conv.pos_to_lb;
+        std::vector<double> delta_mus_lb;
+        delta_mus_lb.reserve(delta_mus.size());
+        for (auto const dm : delta_mus)
+          delta_mus_lb.emplace_back(dm * delta_mu_conv);
+        ptr->add_solvation_forces_at_pos(pos_lb, delta_mus_lb);
       },
       *impl->solver);
 }

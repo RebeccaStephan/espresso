@@ -87,6 +87,11 @@ struct LBNone : public System::Leaf<LBNone> {
   get_color_gradients_at_pos(std::vector<Utils::Vector3d> const &) const {
     throw NoLBActive{};
   }
+  std::vector<Utils::Vector3d>
+  get_solvation_particle_forces_at_pos(std::vector<Utils::Vector3d> const &,
+                                       std::vector<double> const &) const {
+    throw NoLBActive{};
+  }
   Utils::Vector3d get_momentum() const { throw NoLBActive{}; }
   void veto_time_step(double) const { throw NoLBActive{}; }
   void veto_kT(double) const { throw NoLBActive{}; }

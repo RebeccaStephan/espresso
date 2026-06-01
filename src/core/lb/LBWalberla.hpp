@@ -86,6 +86,9 @@ struct LBWalberla : public System::Leaf<LBWalberla> {
   get_velocities_at_pos(std::vector<Utils::Vector3d> const &pos);
   std::vector<Utils::Vector3d>
   get_color_gradients_at_pos(std::vector<Utils::Vector3d> const &pos);
+  std::vector<Utils::Vector3d>
+  get_solvation_particle_forces_at_pos(std::vector<Utils::Vector3d> const &pos,
+                                       std::vector<double> const &delta_mus);
   void propagate();
   void ghost_communication();
   void ghost_communication_pdf();

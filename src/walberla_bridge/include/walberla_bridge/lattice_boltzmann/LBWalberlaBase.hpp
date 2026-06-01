@@ -96,6 +96,16 @@ public:
   get_color_gradients_at_pos(std::vector<Utils::Vector3d> const &pos) = 0;
 
   /**
+   * @brief Compute solvation forces on particles using B-spline gradient of
+   * density fields, consistent with the fluid solvation force kernel.
+   * Two component LB only.
+   */
+  virtual std::vector<Utils::Vector3d>
+  get_solvation_particle_forces_at_pos(
+      std::vector<Utils::Vector3d> const &pos,
+      std::vector<double> const &delta_mus) = 0;
+
+  /**
    * @brief Interpolate a force to the stored forces to be applied on nodes
    * in the next time step.
    */

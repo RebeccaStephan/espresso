@@ -881,6 +881,14 @@ public:
   std::vector<Utils::Vector3d>
   get_color_gradients_at_pos(std::vector<Utils::Vector3d> const &pos) override;
 
+  std::vector<Utils::Vector3d>
+  get_solvation_particle_forces_at_pos(
+      std::vector<Utils::Vector3d> const &pos,
+      std::vector<double> const &delta_mus) override;
+
+private:
+  auto make_solvation_particle_force_kernel() const;
+
 public:
   // ---- Boundary Handling ----
 
