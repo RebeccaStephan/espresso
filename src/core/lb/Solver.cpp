@@ -178,6 +178,7 @@ bool Solver::is_gpu() const {
   return std::visit([](auto &ptr) { return ptr->is_gpu(); }, *impl->solver);
 }
 
+#ifdef ESPRESSO_WALBERLA
 LBWalberlaColorGradientBase *Solver::color_gradient() noexcept {
   if (not LB::is_solver_set(impl)) {
     return nullptr;
@@ -209,6 +210,8 @@ LBWalberlaColorGradientBase const *Solver::color_gradient() const noexcept {
       },
       *impl->solver);
 }
+
+#endif
 
 double Solver::get_agrid() const {
   check_solver(impl);
