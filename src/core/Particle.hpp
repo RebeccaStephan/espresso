@@ -234,10 +234,8 @@ struct ParticleProperties {
   ParticleParametersSwimming swim;
 #endif
 
-#ifdef ESPRESSO_WALBERLA
-  /** Solvation free energy parameter for two-component LB coupling. */
-  double solvation_delta_mu = 0.;
-#endif
+/** Solvation free energy parameter for two-component LB coupling. */
+double solvation_delta_mu = 0.;
 
 #ifdef ESPRESSO_THERMAL_STONER_WOHLFARTH
   ThermalStonerWohlfarthParameters magnetodynamics;

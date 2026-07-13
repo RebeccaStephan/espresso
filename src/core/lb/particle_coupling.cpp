@@ -251,9 +251,11 @@ void ParticleCoupling::kernel(std::vector<Particle *> const &particles) {
            auto const &pos : std::views::counted(end - span_size, span_size)) {
         if (pos >= halo_lower_corner and pos < halo_upper_corner) {
           positions_velocity_coupling.emplace_back(pos);
+#ifdef ESPRESSO_WALBERLA
           if (m_lb.color_gradient())
             solvation_delta_mus_for_vel_coupling.emplace_back(
                 p.solvation_delta_mu());
+#endif
           coupling_mode = particle_force;
           break;
         }
@@ -318,11 +320,13 @@ void ParticleCoupling::kernel(std::vector<Particle *> const &particles) {
         auto const random_force = get_noise_term(p);
         force_on_particle = drag_force + random_force;
         // Solvation force
+#ifdef ESPRESSO_WALBERLA
         if (color_gradient_lb && p.solvation_delta_mu() != 0.) {
           solvation_force_on_particle += *it_solvation_particle_forces;
           solvation_positions.emplace_back(*it_positions_velocity_coupling);
           solvation_delta_mus.emplace_back(p.solvation_delta_mu());
         }
+#endif
       }
       ++it_interpolated_velocities;
       ++it_positions_velocity_coupling;
@@ -344,9 +348,11 @@ void ParticleCoupling::kernel(std::vector<Particle *> const &particles) {
       if (pos >= domain_lower_corner and pos < domain_upper_corner) {
         /* Particle is in our LB volume, so this node
          * is responsible to adding its force */
+#ifdef ESPRESSO_WALBERLA
         if (color_gradient_lb && p.solvation_delta_mu() != 0.) {
           p.force() += solvation_force_on_particle;
         }
+#endif
         p.force() += force_on_particle;
       }
       force_coupling_forces.emplace_back(force_on_fluid);

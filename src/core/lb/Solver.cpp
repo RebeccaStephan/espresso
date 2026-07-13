@@ -210,7 +210,14 @@ LBWalberlaColorGradientBase const *Solver::color_gradient() const noexcept {
       },
       *impl->solver);
 }
+#else
+LBWalberlaColorGradientBase *Solver::color_gradient() noexcept {
+  return nullptr;
+}
 
+LBWalberlaColorGradientBase const *Solver::color_gradient() const noexcept {
+  return nullptr;
+}
 #endif
 
 double Solver::get_agrid() const {
@@ -290,6 +297,7 @@ std::vector<double> Solver::get_interpolated_densities(
 
 std::vector<Utils::Vector3d> Solver::get_interpolated_color_gradients(
     std::vector<Utils::Vector3d> const &pos) const {
+#ifdef ESPRESSO_WALBERLA
   // color_gradient() returns const* here; cast away const because
   // get_color_gradients_at_pos is non-const but semantically read-only.
   auto *cg = const_cast<LBWalberlaColorGradientBase *>(color_gradient());
@@ -305,6 +313,12 @@ std::vector<Utils::Vector3d> Solver::get_interpolated_color_gradients(
     pos_lb.emplace_back(box_geo.folded_position(pos_md) * m_conv.pos_to_lb);
   }
   return cg->get_color_gradients_at_pos(pos_lb);
+#else
+  (void)pos;
+  throw std::runtime_error(
+      "get_interpolated_color_gradients requires a two-component "
+      "(color-gradient) LB solver");
+#endif
 }
 
 Utils::Vector3d
@@ -338,6 +352,7 @@ std::vector<Utils::Vector3d> Solver::get_coupling_interpolated_velocities(
 
 std::vector<Utils::Vector3d> Solver::get_coupling_interpolated_color_gradients(
     std::vector<Utils::Vector3d> const &pos) const {
+#ifdef ESPRESSO_WALBERLA
   // color_gradient() returns const* here; cast away const because
   // get_color_gradients_at_pos is non-const but semantically read-only.
   auto *cg = const_cast<LBWalberlaColorGradientBase *>(color_gradient());
@@ -356,11 +371,18 @@ std::vector<Utils::Vector3d> Solver::get_coupling_interpolated_color_gradients(
     grad *= m_conv.pos_to_lb; // 1/agrid: LB gradient to MD gradient
   }
   return res;
+#else
+  (void)pos;
+  throw std::runtime_error(
+      "get_coupling_interpolated_color_gradients requires a two-component "
+      "(color-gradient) LB solver");
+#endif
 }
 
 std::vector<Utils::Vector3d> Solver::get_coupling_solvation_particle_forces(
     std::vector<Utils::Vector3d> const &pos,
     std::vector<double> const &delta_mus) const {
+#ifdef ESPRESSO_WALBERLA
   auto *cg = const_cast<LBWalberlaColorGradientBase *>(color_gradient());
   if (cg == nullptr) {
     throw std::runtime_error(
@@ -375,6 +397,13 @@ std::vector<Utils::Vector3d> Solver::get_coupling_solvation_particle_forces(
   for (auto &f : res)
     f *= m_conv.pos_to_lb; // LB gradient units to MD: F_md = F_lb / agrid
   return res;
+#else
+  (void)pos;
+  (void)delta_mus;
+  throw std::runtime_error(
+      "get_coupling_solvation_particle_forces requires a two-component "
+      "(color-gradient) LB solver");
+#endif
 }
 
 void Solver::add_forces_at_pos(std::vector<Utils::Vector3d> const &pos,
