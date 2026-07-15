@@ -301,6 +301,9 @@ void ParticleCoupling::kernel(std::vector<Particle *> const &particles) {
     }
 #endif
     Utils::Vector3d force_on_particle = {};
+#ifdef ESPRESSO_WALBERLA
+    Utils::Vector3d solvation_force_on_particle = {};
+#endif
     if (coupling_mode == particle_force) {
 #ifndef ESPRESSO_THERMOSTAT_PER_PARTICLE
       if (m_thermostat.gamma > 0.)
@@ -320,9 +323,8 @@ void ParticleCoupling::kernel(std::vector<Particle *> const &particles) {
         force_on_particle = drag_force + random_force;
         // Solvation force
 #ifdef ESPRESSO_WALBERLA
-        Utils::Vector3d solvation_force_on_particle = {};
         if (color_gradient_lb && p.solvation_delta_mu() != 0.) {
-          solvation_force_on_particle += *it_solvation_particle_forces;
+          solvation_force_on_particle = *it_solvation_particle_forces;
           solvation_positions.emplace_back(*it_positions_velocity_coupling);
           solvation_delta_mus.emplace_back(p.solvation_delta_mu());
         }

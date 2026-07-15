@@ -49,32 +49,56 @@ void LBWalberlaImplColorGradient<FloatType, Architecture>::
         }
       };
 #endif
-  if (flag_observables & static_cast<int>(OutputVTK::density)) {
+  if (flag_observables & static_cast<int>(OutputVTK::phasefield)) {
+#if defined(__CUDACC__) and defined(WALBERLA_BUILD_WITH_CUDA)
+    if constexpr (Architecture == lbmpy::Arch::GPU) {
+      auto const &blocks = m_lattice->get_blocks();
+      allocate_cpu_field_if_empty.template operator()<ScalarFieldCpu>(
+          blocks, "phasefield_cpu", m_scalar_cpu_field_id);
+      vtk_obj.addBeforeFunction(
+          gpu::fieldCpyFunctor<ScalarFieldCpu, ScalarField>(
+              blocks, *m_scalar_cpu_field_id, m_phasefield_id));
+    }
+    }
+#endif
+    vtk_obj.addCellDataWriter(
+        std::make_shared<ScalarVTKWriter<FloatType, ScalarField, float>>(
+            m_phasefield_id, "phasefield", FloatType{1}));
+  }
+  // COPY-Pasta von density-writern...
+  if (flag_observables & static_cast<int>(OutputVTK::density_a)) {
     auto const unit_conversion =
         FloatType_c(zero_centered_to_md(units.at("density")));
 #if defined(__CUDACC__) and defined(WALBERLA_BUILD_WITH_CUDA)
     if constexpr (Architecture == lbmpy::Arch::GPU) {
       auto const &blocks = m_lattice->get_blocks();
-      allocate_cpu_field_if_empty.template operator()<PdfFieldCpu>(
-          blocks, "pdfs_cpu", m_pdf_cpu_field_id);
-      vtk_obj.addBeforeFunction(gpu::fieldCpyFunctor<PdfFieldCpu, PdfField>(
-          blocks, *m_pdf_cpu_field_id, m_pdf_field_id[0]));
+      allocate_cpu_field_if_empty.template operator()<ScalarFieldCpu>(
+          blocks, "rhoa_cpu", m_scalar_cpu_field_id);
+      vtk_obj.addBeforeFunction(
+          gpu::fieldCpyFunctor<ScalarFieldCpu, ScalarField>(
+              blocks, *m_scalar_cpu_field_id, m_rho_field_id[0]));
     }
 #endif
     vtk_obj.addCellDataWriter(
-        std::make_shared<DensityVTKWriter<FloatType, PdfField, float>>(
-            m_pdf_field_id[0], "density", unit_conversion));
+        std::make_shared<ScalarVTKWriter<FloatType, ScalarField, float>>(
+            m_rho_field_id[0], "density_a", unit_conversion));
   }
-  if (flag_observables & static_cast<int>(CGOutputVTK::phasefield)) {
+  if (flag_observables & static_cast<int>(OutputVTK::density_b)) {
+    auto const unit_conversion =
+        FloatType_c(zero_centered_to_md(units.at("density")));
 #if defined(__CUDACC__) and defined(WALBERLA_BUILD_WITH_CUDA)
     if constexpr (Architecture == lbmpy::Arch::GPU) {
-      throw std::runtime_error(
-          "VTK output 'phasefield' is not yet implemented for GPU.");
+      auto const &blocks = m_lattice->get_blocks();
+      allocate_cpu_field_if_empty.template operator()<ScalarFieldCpu>(
+          blocks, "rhob_cpu", m_scalar_cpu_field_id);
+        vtk_obj.addBeforeFunction(
+          gpu::fieldCpyFunctor<ScalarFieldCpu, ScalarField>(
+              blocks, *m_scalar_cpu_field_id, m_rho_field_id[1]));
     }
 #endif
     vtk_obj.addCellDataWriter(
-        std::make_shared<PhasefieldVTKWriter<FloatType, ScalarField, float>>(
-            m_phasefield_id, "phasefield", FloatType{1}));
+        std::make_shared<ScalarVTKWriter<FloatType, ScalarField, float>>(
+            m_rho_field_id[1], "density_b", unit_conversion));
   }
   if (flag_observables & static_cast<int>(OutputVTK::velocity_vector)) {
     auto const unit_conversion = FloatType_c(units.at("velocity"));
@@ -91,23 +115,6 @@ void LBWalberlaImplColorGradient<FloatType, Architecture>::
     vtk_obj.addCellDataWriter(
         std::make_shared<VelocityVTKWriter<FloatType, VectorField, float>>(
             m_velocity_field_id, "velocity_vector", unit_conversion));
-  }
-  if (flag_observables & static_cast<int>(OutputVTK::pressure_tensor)) {
-    auto const unit_conversion =
-        FloatType_c(zero_centered_to_md(units.at("pressure")));
-#if defined(__CUDACC__) and defined(WALBERLA_BUILD_WITH_CUDA)
-    if constexpr (Architecture == lbmpy::Arch::GPU) {
-      auto const &blocks = m_lattice->get_blocks();
-      allocate_cpu_field_if_empty.template operator()<PdfFieldCpu>(
-          blocks, "pdfs_cpu", m_pdf_cpu_field_id);
-      vtk_obj.addBeforeFunction(gpu::fieldCpyFunctor<PdfFieldCpu, PdfField>(
-          blocks, *m_pdf_cpu_field_id, m_pdf_field_id[0]));
-    }
-#endif
-    vtk_obj.addCellDataWriter(
-        std::make_shared<PressureTensorVTKWriter<FloatType, PdfField, float>>(
-            m_pdf_field_id[0], "pressure_tensor", unit_conversion,
-            pressure_tensor_correction_factor()));
   }
 }
 

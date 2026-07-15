@@ -195,6 +195,7 @@ protected:
 
 #if defined(__CUDACC__) and defined(WALBERLA_BUILD_WITH_CUDA)
   std::optional<BlockDataID> m_pdf_cpu_field_id;
+  std::optional<BlockDataID> m_scalar_cpu_field_id;
   std::optional<BlockDataID> m_vel_cpu_field_id;
 #endif
 

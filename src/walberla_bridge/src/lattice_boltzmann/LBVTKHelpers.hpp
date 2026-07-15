@@ -77,7 +77,7 @@ protected:
 };
 
 template <typename FloatType, typename ScalarField, typename OutputType = float>
-class PhasefieldVTKWriter
+class ScalarVTKWriter
     : public VTKWriter<FloatType, ScalarField, 1u, OutputType> {
 public:
   using Base = VTKWriter<FloatType, ScalarField, 1u, OutputType>;
@@ -88,8 +88,8 @@ protected:
   OutputType evaluate(cell_idx_t const x, cell_idx_t const y,
                       cell_idx_t const z, cell_idx_t const) override {
     WALBERLA_ASSERT_NOT_NULLPTR(this->m_field);
-    auto const phasefield = this->m_field->get(x, y, z);
-    return numeric_cast<OutputType>(phasefield);
+    auto const field_value = this->m_field->get(x, y, z);
+    return numeric_cast<OutputType>(field_value);
   }
 };
 

@@ -58,11 +58,9 @@ enum class OutputVTK : int {
   density = 1 << 0,
   velocity_vector = 1 << 1,
   pressure_tensor = 1 << 2,
-};
-
-enum class CGOutputVTK: int {
-  phasefield = 1 << 0,
-  velocity_vector = 1 << 1,
+  phasefield = 1 << 3,
+  density_a = 1 << 4,
+  density_b = 1 << 5,
 };
 
 /** @brief EK statistics to write to VTK files */

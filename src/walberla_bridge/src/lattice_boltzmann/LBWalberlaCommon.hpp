@@ -151,6 +151,8 @@ public:
   using GPUField = gpu::GPUField<FloatType>;
   using PdfFieldCpu =
       FieldTrait<FloatType, Stencil, lbmpy::Arch::CPU>::PdfField;
+  using ScalarFieldCpu =
+      FieldTrait<FloatType, Stencil, lbmpy::Arch::CPU>::ScalarField;
   using VectorFieldCpu =
       FieldTrait<FloatType, Stencil, lbmpy::Arch::CPU>::VectorField;
 #endif
