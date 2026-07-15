@@ -27,6 +27,7 @@ Tests:
 """
 
 import unittest as ut
+import unittest_decorators as utx
 import numpy as np
 
 import espressomd
@@ -73,7 +74,7 @@ def droplet_densities(domain_size, radius, smoothing_width, rho_0, epsilon,
                                epsilon * rho_0, rho_0)
     return rho_a, rho_b
 
-
+@utx.skipIfMissingFeatures(["WALBERLA"])
 class ColorGradientParticleCouplingTest(ut.TestCase):
     """Test particle-fluid friction coupling for two-component LB."""
 

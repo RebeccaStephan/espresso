@@ -38,6 +38,7 @@ Tests:
 """
 
 import unittest as ut
+import unittest_decorators as utx
 import numpy as np
 
 import espressomd
@@ -89,6 +90,7 @@ def droplet_densities(domain_size, radius, smoothing_width, rho_0, epsilon,
     return rho_a, rho_b
 
 
+@utx.skipIfMissingFeatures(["WALBERLA"])
 class ColorGradientLBTest(ut.TestCase):
     """Test the two-component color gradient LB method."""
 
