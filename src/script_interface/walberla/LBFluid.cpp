@@ -62,12 +62,23 @@
 #include <vector>
 
 namespace ScriptInterface::walberla {
+namespace {
+std::vector<double> get_kinematic_viscosity(VariantMap const &params) {
+  auto const &visc_variant = params.at("kinematic_viscosity");
+  if (is_type<double>(visc_variant)) {
+    return {get_value<double>(params, "kinematic_viscosity")};
+  }
+  return get_value<std::vector<double>>(params, "kinematic_viscosity");
+}
+} // namespace
 
 std::unordered_map<std::string, int> const LBVTKHandle::obs_map = {
     {"density", static_cast<int>(OutputVTK::density)},
     {"velocity_vector", static_cast<int>(OutputVTK::velocity_vector)},
     {"pressure_tensor", static_cast<int>(OutputVTK::pressure_tensor)},
-    {"phasefield", static_cast<int>(CGOutputVTK::phasefield)},
+    {"phasefield", static_cast<int>(OutputVTK::phasefield)},
+    {"density_a", static_cast<int>(OutputVTK::density_a)},
+    {"density_b", static_cast<int>(OutputVTK::density_b)},
 };
 
 Variant LBFluid::do_call_method(std::string const &name,
@@ -153,7 +164,7 @@ Variant LBFluid::do_call_method(std::string const &name,
 }
 
 void LBFluid::make_instance(VariantMap const &params) {
-  auto lb_visc = get_value<std::vector<double>>(params, "kinematic_viscosity");
+  auto lb_visc = get_kinematic_viscosity(params);
   auto const dens = get_value<double>(params, "density");
   auto const gpu = get_value_or(params, "gpu", false);
   auto const precision = get_value_or(params, "single_precision", gpu);
@@ -191,8 +202,7 @@ void LBFluid::do_construct(VariantMap const &params) {
       get_value_or<decltype(m_vtk_writers)>(params, "vtk_writers", {});
   auto const tau = get_value<double>(params, "tau");
   auto const agrid = get_value<double>(m_lattice->get_parameter("agrid"));
-  auto const visc =
-      get_value<std::vector<double>>(params, "kinematic_viscosity");
+  auto const visc = get_kinematic_viscosity(params);
   auto const dens = get_value<double>(params, "density");
   auto const kT = get_value<double>(params, "kT");
   auto const ext_f = get_value<Utils::Vector3d>(params, "ext_force_density");
