@@ -118,9 +118,9 @@ class TestVTK:
                 espressomd.io.vtk.VTKReader().parse(invalid_vtk_file)
 
 
-class TestLBVTK(TestVTK):
+class TestLBVTKSingleComponent(TestVTK):
 
-    valid_obs = ["density", "velocity_vector", "pressure_tensor"]
+    valid_obs = ["density", "velocity_vector", "pressure_tensor", "density_a", "density_b", "phasefield"]
 
     def make_actor(self):
         return self.lb_class(
@@ -426,7 +426,7 @@ class TestEKVTK(TestVTK):
 
 
 @utx.skipIfMissingFeatures(["WALBERLA"])
-class LBWalberlaVTKDoublePrecisionCPU(TestLBVTK, ut.TestCase):
+class LBWalberlaVTKDoublePrecisionCPU(TestLBVTKSingleComponent, ut.TestCase):
     vtk_class = espressomd.lb.VTKOutput
     lattice_class = espressomd.lb.Lattice
     lb_class = espressomd.lb.LBFluid
@@ -436,7 +436,7 @@ class LBWalberlaVTKDoublePrecisionCPU(TestLBVTK, ut.TestCase):
 
 @utx.skipIfMissingGPU()
 @utx.skipIfMissingFeatures(["WALBERLA", "CUDA"])
-class LBWalberlaVTKDoublePrecisionGPU(TestLBVTK, ut.TestCase):
+class LBWalberlaVTKDoublePrecisionGPU(TestLBVTKSingleComponent, ut.TestCase):
     vtk_class = espressomd.lb.VTKOutput
     lattice_class = espressomd.lb.Lattice
     lb_class = espressomd.lb.LBFluid
@@ -445,7 +445,7 @@ class LBWalberlaVTKDoublePrecisionGPU(TestLBVTK, ut.TestCase):
 
 
 @utx.skipIfMissingFeatures(["WALBERLA"])
-class LBWalberlaVTKSinglePrecisionCPU(TestLBVTK, ut.TestCase):
+class LBWalberlaVTKSinglePrecisionCPU(TestLBVTKSingleComponent, ut.TestCase):
     vtk_class = espressomd.lb.VTKOutput
     lattice_class = espressomd.lb.Lattice
     lb_class = espressomd.lb.LBFluid
@@ -455,7 +455,7 @@ class LBWalberlaVTKSinglePrecisionCPU(TestLBVTK, ut.TestCase):
 
 @utx.skipIfMissingGPU()
 @utx.skipIfMissingFeatures(["WALBERLA", "CUDA"])
-class LBWalberlaVTKSinglePrecisionGPU(TestLBVTK, ut.TestCase):
+class LBWalberlaVTKSinglePrecisionGPU(TestLBVTKSingleComponent, ut.TestCase):
     vtk_class = espressomd.lb.VTKOutput
     lattice_class = espressomd.lb.Lattice
     lb_class = espressomd.lb.LBFluid
