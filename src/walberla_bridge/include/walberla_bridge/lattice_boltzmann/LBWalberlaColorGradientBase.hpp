@@ -44,8 +44,6 @@ public:
   virtual void init_pdfs_from_components() = 0;
 
   // CG-specific observables / forces
-  virtual std::vector<Utils::Vector3d>
-  get_color_gradients_at_pos(std::vector<Utils::Vector3d> const &positions) = 0;
   virtual void
   add_solvation_forces_at_pos(std::vector<Utils::Vector3d> const &positions,
                               std::vector<double> const &delta_mus) = 0;

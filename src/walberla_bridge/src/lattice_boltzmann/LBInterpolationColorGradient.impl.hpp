@@ -343,58 +343,6 @@ auto LBWalberlaImplColorGradient<
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>
-auto LBWalberlaImplColorGradient<
-    FloatType, Architecture>::make_color_gradient_interpolation_kernel() const {
-  auto const &lattice = *m_lattice;
-  auto const &blocks = *lattice.get_blocks();
-  assert(lattice.get_ghost_layers() == 1u);
-  return [&](Utils::Vector3d const &pos) {
-    Utils::Vector3d acc{0., 0., 0.};
-    interpolate_bspline_at_pos(
-        pos, [&, field_id = m_color_gradient_field_id](
-                 std::array<int, 3> const node, double weight) {
-          // Nodes with zero weight might not be accessible, because they can be
-          // outside ghost layers
-          if (weight != 0.) {
-            auto block = get_block_extended(lattice, node, 1u);
-            if (!block)
-              throw interpolation_illegal_access("color gradient", pos, node,
-                                                 weight);
-            auto cell = to_cell(node);
-            blocks.transformGlobalToBlockLocalCell(cell, *block);
-            auto field =
-                block->template uncheckedFastGetData<VectorField>(field_id);
-            auto const cg = lbm::accessor::Vector::get(field, cell);
-            acc += to_vector3d(cg) * weight;
-          }
-        });
-    return acc;
-  };
-}
-
-template <typename FloatType, lbmpy::Arch Architecture>
-std::vector<Utils::Vector3d>
-LBWalberlaImplColorGradient<FloatType, Architecture>::
-    get_color_gradients_at_pos(std::vector<Utils::Vector3d> const &pos) {
-  if (pos.empty()) {
-    return {};
-  }
-  std::vector<Utils::Vector3d> color_gradient{};
-  color_gradient.reserve(pos.size());
-  if constexpr (Architecture == lbmpy::Arch::CPU) {
-    auto const kernel = make_color_gradient_interpolation_kernel();
-    std::ranges::transform(pos, std::back_inserter(color_gradient), kernel);
-  }
-#if defined(__CUDACC__) and defined(WALBERLA_BUILD_WITH_CUDA)
-  if constexpr (Architecture == lbmpy::Arch::GPU) {
-    throw std::runtime_error(
-        "Density-weighted force interpolation not implemented on GPU");
-  }
-#endif
-  return color_gradient;
-}
-
-template <typename FloatType, lbmpy::Arch Architecture>
 auto LBWalberlaImplColorGradient<FloatType, Architecture>::
     make_solvation_particle_force_kernel() const {
   auto const &lattice = *m_lattice;
