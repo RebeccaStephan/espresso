@@ -295,32 +295,6 @@ std::vector<double> Solver::get_interpolated_densities(
       *impl->solver);
 }
 
-std::vector<Utils::Vector3d> Solver::get_interpolated_color_gradients(
-    std::vector<Utils::Vector3d> const &pos) const {
-#ifdef ESPRESSO_WALBERLA
-  // color_gradient() returns const* here; cast away const because
-  // get_color_gradients_at_pos is non-const but semantically read-only.
-  auto *cg = const_cast<LBWalberlaColorGradientBase *>(color_gradient());
-  if (cg == nullptr) {
-    throw std::runtime_error(
-        "get_interpolated_color_gradients requires a two-component "
-        "(color-gradient) LB solver");
-  }
-  auto const &box_geo = *System::get_system().box_geo;
-  std::vector<Utils::Vector3d> pos_lb;
-  pos_lb.reserve(pos.size());
-  for (auto const &pos_md : pos) {
-    pos_lb.emplace_back(box_geo.folded_position(pos_md) * m_conv.pos_to_lb);
-  }
-  return cg->get_color_gradients_at_pos(pos_lb);
-#else
-  (void)pos;
-  throw std::runtime_error(
-      "get_interpolated_color_gradients requires a two-component "
-      "(color-gradient) LB solver");
-#endif
-}
-
 Utils::Vector3d
 Solver::get_coupling_interpolated_velocity(Utils::Vector3d const &pos) const {
   return std::visit(
@@ -348,35 +322,6 @@ std::vector<Utils::Vector3d> Solver::get_coupling_interpolated_velocities(
         return res;
       },
       *impl->solver);
-}
-
-std::vector<Utils::Vector3d> Solver::get_coupling_interpolated_color_gradients(
-    std::vector<Utils::Vector3d> const &pos) const {
-#ifdef ESPRESSO_WALBERLA
-  // color_gradient() returns const* here; cast away const because
-  // get_color_gradients_at_pos is non-const but semantically read-only.
-  auto *cg = const_cast<LBWalberlaColorGradientBase *>(color_gradient());
-  if (cg == nullptr) {
-    throw std::runtime_error(
-        "get_coupling_interpolated_color_gradients requires a two-component "
-        "(color-gradient) LB solver");
-  }
-  std::vector<Utils::Vector3d> pos_lb;
-  pos_lb.reserve(pos.size());
-  for (auto const &pos_md : pos) {
-    pos_lb.emplace_back(pos_md * m_conv.pos_to_lb);
-  }
-  auto res = cg->get_color_gradients_at_pos(pos_lb);
-  for (auto &grad : res) {
-    grad *= m_conv.pos_to_lb; // 1/agrid: LB gradient to MD gradient
-  }
-  return res;
-#else
-  (void)pos;
-  throw std::runtime_error(
-      "get_coupling_interpolated_color_gradients requires a two-component "
-      "(color-gradient) LB solver");
-#endif
 }
 
 std::vector<Utils::Vector3d> Solver::get_coupling_solvation_particle_forces(
