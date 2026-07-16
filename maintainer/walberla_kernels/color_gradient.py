@@ -116,15 +116,6 @@ def generate_fields(stencil, data_type, field_layout='fzyx'):
         layout=field_layout,
     )
 
-    fields['color_gradient'] = ps.Field.create_generic(
-        'color_gradient',
-        dim,
-        data_type,
-        index_dimensions=1,
-        layout=field_layout,
-        index_shape=(dim,)
-    )
-
     return fields
 
 def create_methods(stencil, fields):
@@ -202,7 +193,7 @@ def move_main_assignment_to_subexpressions(ac, symbols):
         main_assignments=main_assignments,
     )
 
-def create_color_gradient_operator(fields):
+def get_color_gradient(fields):
     # use second-order isotropic D3Q27 color gradient discretization from leclaire11a
     # where weights coincide with standard lattice-Boltzmann weights
 
@@ -232,13 +223,7 @@ def create_color_gradient_operator(fields):
         * fd_weights[0]
         * sp.Matrix(temp_stencil[0]),
     )
-
-    return ps.AssignmentCollection(
-        main_assignments=[
-            ps.Assignment(fields["color_gradient"].center_vector[i], gradient[i])
-            for i in range(len(gradient))
-        ]
-    )
+    return gradient
 
 def color_gradient_lb_method(stencil, suffix: str, force_field: ps.Field):
 
@@ -390,7 +375,7 @@ def single_perturbation_operator(fields, method, config, opt, minimum_color_grad
     A = sp.Rational(9, 4) * omega_effective * sp.Symbol("sigma")
     b = get_b_value()
 
-    color_gradient = fields["color_gradient"].center_vector
+    color_gradient = get_color_gradient(fields)
     f_norm = color_gradient.norm()
 
     # Create perturbation assignments
@@ -481,7 +466,7 @@ def recoloring_operator(fields, methods, configs, opts, beta: float, minimum_col
     # calculate the total density
     sum_density = sum(fluid_densities)
 
-    color_gradient = fields["color_gradient"].center_vector
+    color_gradient = get_color_gradient(fields)
     color_gradient_norm = color_gradient.norm()
 
     # calculate the common term in eq. 10 containing the cos-value of the phasefield-projection
