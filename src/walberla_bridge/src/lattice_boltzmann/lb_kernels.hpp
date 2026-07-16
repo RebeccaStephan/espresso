@@ -35,8 +35,6 @@
 #include "generated_kernels/UpdateVelFromPDFSinglePrecision.h"
 #include "generated_kernels/ColorGradientInitialPDFsSetterDoublePrecision.h"
 #include "generated_kernels/ColorGradientInitialPDFsSetterSinglePrecision.h"
-#include "generated_kernels/ColorGradientSweepDoublePrecision.h"
-#include "generated_kernels/ColorGradientSweepSinglePrecision.h"
 
 #ifdef __AVX2__
 #include "generated_kernels/StreamCollideSweepLeesEdwardsDoublePrecisionAVX.h"
@@ -47,8 +45,6 @@
 #include "generated_kernels/ColorGradientCollideSweepSinglePrecisionAVX.h"
 #include "generated_kernels/ColorGradientStreamSweepDoublePrecisionAVX.h"
 #include "generated_kernels/ColorGradientStreamSweepSinglePrecisionAVX.h"
-#include "generated_kernels/ColorGradientSweepDoublePrecisionAVX.h"
-#include "generated_kernels/ColorGradientSweepSinglePrecisionAVX.h"
 #else
 #include "generated_kernels/StreamCollideSweepLeesEdwardsDoublePrecision.h"
 #include "generated_kernels/StreamCollideSweepLeesEdwardsSinglePrecision.h"
@@ -56,8 +52,6 @@
 #include "generated_kernels/StreamCollideSweepThermalizedSinglePrecision.h"
 #include "generated_kernels/ColorGradientCollideSweepDoublePrecision.h"
 #include "generated_kernels/ColorGradientCollideSweepSinglePrecision.h"
-#include "generated_kernels/ColorGradientStreamSweepDoublePrecision.h"
-#include "generated_kernels/ColorGradientStreamSweepSinglePrecision.h"
 #endif
 
 namespace walberla {
@@ -74,8 +68,6 @@ struct KernelTrait {
       pystencils::ColorGradientStreamSweepDoublePrecisionAVX;
   using CollisionModelTwoComponent =
       pystencils::ColorGradientCollideSweepDoublePrecisionAVX;
-  using ColorGradientModel =
-      pystencils::ColorGradientSweepDoublePrecisionAVX;
 #else
   using StreamCollisionModelThermalized =
       pystencils::StreamCollideSweepThermalizedDoublePrecision;
@@ -85,8 +77,6 @@ struct KernelTrait {
       pystencils::ColorGradientStreamSweepDoublePrecision;
   using CollisionModelTwoComponent =
       pystencils::ColorGradientCollideSweepDoublePrecision;
-  using ColorGradientModel =
-      pystencils::ColorGradientSweepDoublePrecision;
 #endif
   using InitialPDFsSetter = pystencils::InitialPDFsSetterDoublePrecision;
   using UpdateVelFromPDF = pystencils::UpdateVelFromPDFDoublePrecision;
@@ -106,8 +96,6 @@ template <> struct KernelTrait<float, lbmpy::Arch::CPU> {
       pystencils::ColorGradientStreamSweepSinglePrecisionAVX;
   using CollisionModelTwoComponent =
       pystencils::ColorGradientCollideSweepSinglePrecisionAVX;
-  using ColorGradientModel =
-      pystencils::ColorGradientSweepSinglePrecisionAVX;
 #else
   using StreamCollisionModelThermalized =
       pystencils::StreamCollideSweepThermalizedSinglePrecision;
@@ -117,8 +105,6 @@ template <> struct KernelTrait<float, lbmpy::Arch::CPU> {
       pystencils::ColorGradientStreamSweepSinglePrecision;
   using CollisionModelTwoComponent =
       pystencils::ColorGradientCollideSweepSinglePrecision;
-  using ColorGradientModel =
-      pystencils::ColorGradientSweepSinglePrecision;
 #endif
   using InitialPDFsSetter = pystencils::InitialPDFsSetterSinglePrecision;
   using UpdateVelFromPDF = pystencils::UpdateVelFromPDFSinglePrecision;

@@ -122,8 +122,6 @@ protected:
   using CollisionModelTwoComponent =
       typename Kernels::CollisionModelTwoComponent;
   using StreamModelTwoComponent = typename Kernels::StreamModelTwoComponent;
-  using ColorGradientModel = typename Kernels::ColorGradientModel;
-
 public:
   using typename Base::FlagField;
   using typename Base::PdfField;
@@ -190,7 +188,6 @@ protected:
   // Color gradient fields
   std::array<BlockDataID, 2> m_rho_field_id;
   BlockDataID m_phasefield_id;
-  BlockDataID m_color_gradient_field_id;
   std::array<BlockDataID, 2> m_force_color_gradient_field_id;
 
 #if defined(__CUDACC__) and defined(WALBERLA_BUILD_WITH_CUDA)
@@ -203,8 +200,6 @@ protected:
   std::shared_ptr<RegularFullCommunicator> m_pdf_a_communicator;
   std::shared_ptr<RegularFullCommunicator> m_pdf_b_communicator;
   std::shared_ptr<RegularFullCommunicator> m_phasefield_communicator;
-  std::shared_ptr<RegularFullCommunicator> m_color_gradient_communicator;
-
   // Stub members required by LBWalberlaCommon CRTP bodies.
   // The CG leaf overrides the corresponding virtual methods to throw /
   // return nullopt, so these are never actually dereferenced at runtime.
@@ -214,8 +209,7 @@ protected:
   // color gradient sweeps
   std::shared_ptr<CollisionModelTwoComponent> m_collision_model_two_component;
   std::shared_ptr<StreamModelTwoComponent> m_stream_model_two_component;
-  std::shared_ptr<ColorGradientModel> m_color_gradient_model;
-
+  
 #if defined(__CUDACC__) and defined(WALBERLA_BUILD_WITH_CUDA)
   std::shared_ptr<gpu::HostFieldAllocator<FloatType>> m_host_field_allocator;
 #endif
@@ -252,8 +246,6 @@ public:
     m_rho_field_id[0] = this->template add_to_storage<ScalarField>("rho_a");
     m_rho_field_id[1] = this->template add_to_storage<ScalarField>("rho_b");
     m_phasefield_id = this->template add_to_storage<ScalarField>("phasefield");
-    m_color_gradient_field_id =
-        this->template add_to_storage<_VectorField>("color_gradient");
     m_force_color_gradient_field_id[0] =
         this->template add_to_storage<_VectorField>("force_a");
     m_force_color_gradient_field_id[1] =
@@ -307,9 +299,8 @@ protected:
 private:
   /**
    * @brief One LB time step using the color-gradient pull scheme.
-   * Sequence: stream two-component, sync phasefield, compute color gradient,
-   * sync color gradient, collide two-component, reset component forces,
-   * sync PDFs.
+   * Sequence: stream two-component, sync phasefield, collide two-component,
+   * reset component forces, sync PDFs.
    */
   void integrate_pull_scheme() {
     assert(m_mpi_cart_comm_observer.is_valid());
@@ -319,11 +310,6 @@ private:
     integrate_stream_two_component(blocks);
     // Sync phasefield
     m_phasefield_communicator->communicate();
-
-    // Compute color gradient field
-    integrate_color_gradient(blocks);
-    // Sync color gradient (needed for off-lattice interpolation)
-    m_color_gradient_communicator->communicate();
 
     // CG collision
     integrate_collide_two_component(blocks);
@@ -339,11 +325,6 @@ private:
   integrate_collide_two_component(std::shared_ptr<BlockStorage> const &blocks) {
     for (auto &block : *blocks)
       (*m_collision_model_two_component)(&block);
-  }
-
-  void integrate_color_gradient(std::shared_ptr<BlockStorage> const &blocks) {
-    for (auto &block : *blocks)
-      (*m_color_gradient_model)(&block);
   }
 
   void
@@ -411,14 +392,10 @@ public:
     auto const omega_b = shear_mode_relaxation_rate(1u);
     auto const omega_odd_b = odd_mode_relaxation_rate(omega_b);
 
-    // Instantiate color gradient kernel
-    m_color_gradient_model = std::make_shared<ColorGradientModel>(
-        m_color_gradient_field_id, m_phasefield_id);
-
     // Instantiate collide kernel
     m_collision_model_two_component =
         std::make_shared<CollisionModelTwoComponent>(
-            m_color_gradient_field_id, m_force_color_gradient_field_id[0],
+            m_force_color_gradient_field_id[0],
             m_force_color_gradient_field_id[1], m_pdf_field_id[0],
             m_pdf_field_id[1], m_phasefield_id, m_rho_field_id[0],
             m_rho_field_id[1], m_velocity_field_id,
@@ -456,13 +433,6 @@ public:
         std::make_shared<RegularFullCommunicator>(blocks);
     m_phasefield_communicator->addPackInfo(
         std::make_shared<PackInfo<ScalarField>>(m_phasefield_id));
-
-    // Color gradient communicator (needed for B-spline interpolation of
-    // solvation force)
-    m_color_gradient_communicator =
-        std::make_shared<RegularFullCommunicator>(blocks);
-    m_color_gradient_communicator->addPackInfo(
-        std::make_shared<PackInfo<VectorField>>(m_color_gradient_field_id));
   }
 
   void init_pdfs_from_components() override {
@@ -645,11 +615,7 @@ private:
   /** @brief Return a B-spline interpolation kernel for solvation force
    * distribution onto fluid in two component LB. */
   auto make_solvation_force_interpolation_kernel() const;
-  /** @brief Return a B-spline interpolation kernel for color gradient readout
-   * in two component LB. */
-  auto make_color_gradient_interpolation_kernel() const;
-  /** @brief Return a B-spline gradient kernel for solvation force on particle,
-   * consistent with make_solvation_force_interpolation_kernel. */
+  /** @brief Return a B-spline gradient kernel for solvation force on particle */
   auto make_solvation_particle_force_kernel() const;
 
 public:
@@ -663,9 +629,6 @@ public:
   void
   add_solvation_forces_at_pos(std::vector<Utils::Vector3d> const &pos,
                               std::vector<double> const &delta_mus) override;
-
-  std::vector<Utils::Vector3d>
-  get_color_gradients_at_pos(std::vector<Utils::Vector3d> const &pos) override;
   std::vector<Utils::Vector3d>
   get_solvation_particle_forces_at_pos(
       std::vector<Utils::Vector3d> const &pos,
