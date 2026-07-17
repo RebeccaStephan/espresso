@@ -167,7 +167,6 @@ protected:
   using Base::m_pending_ghost_comm;
   using Base::m_seed;
   using Base::m_vel_communicator;
-  using Base::m_vel_tmp_field_id;
   using Base::m_velocity_field_id;
   using Base::m_zc_to_lb;
   using Base::m_zc_to_md;
@@ -237,9 +236,7 @@ public:
         this->template add_to_storage<_VectorField>("force next");
     m_velocity_field_id =
         this->template add_to_storage<_VectorField>("velocity");
-    m_vel_tmp_field_id =
-        this->template add_to_storage<_VectorField>("velocity_tmp");
-
+    
     m_pdf_field_id[1] = this->template add_to_storage<_PdfField>("pdfs_b");
     m_pdf_tmp_field_id[1] =
         this->template add_to_storage<_PdfField>("pdfs_b_tmp");
