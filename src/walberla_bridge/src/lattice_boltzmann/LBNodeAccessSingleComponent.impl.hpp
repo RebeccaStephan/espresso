@@ -70,7 +70,7 @@ bool LBWalberlaImplSingleComponent<FloatType, Architecture>::set_node_velocity(
   auto vel_field =
       bc->block->template getData<VectorField>(m_velocity_field_id);
   auto force_field =
-      bc->block->template getData<VectorField>(m_last_applied_force_field_id);
+      bc->block->template getData<VectorField>(m_last_applied_force_field_id[0]);
   auto vel = to_vector3<FloatType>(v);
   lbm::accessor::Velocity::set(pdf_field, vel_field, force_field, vel,
                                bc->cell);
@@ -79,7 +79,7 @@ bool LBWalberlaImplSingleComponent<FloatType, Architecture>::set_node_velocity(
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>
-std::optional<double>
+std::optional<std::vector<double>>
 LBWalberlaImplSingleComponent<FloatType, Architecture>::get_node_density(
     Utils::Vector3i const &node, bool consider_ghosts) const {
   assert(not(consider_ghosts and m_pending_ghost_comm.test(GhostComm::PDF)));
@@ -91,19 +91,19 @@ LBWalberlaImplSingleComponent<FloatType, Architecture>::get_node_density(
       bc->block->template uncheckedFastGetData<PdfField>(m_pdf_field_id[0]);
   auto const density =
       lbm::accessor::Density::get(pdf_field, m_density, bc->cell);
-  return double_c(density);
+  return std::vector<double>{double_c(density)};
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>
 bool LBWalberlaImplSingleComponent<FloatType, Architecture>::set_node_density(
-    Utils::Vector3i const &node, double density) {
+    Utils::Vector3i const &node, std::vector<double> const &density) {
   m_pending_ghost_comm.set(GhostComm::PDF);
   auto bc = get_block_and_cell(get_lattice(), node, false);
   if (!bc)
     return false;
 
   auto pdf_field = bc->block->template getData<PdfField>(m_pdf_field_id[0]);
-  lbm::accessor::Density::set(pdf_field, FloatType_c(density), m_density,
+  lbm::accessor::Density::set(pdf_field, FloatType_c(density[0]), m_density,
                               bc->cell);
 
   return true;
@@ -140,7 +140,7 @@ bool LBWalberlaImplSingleComponent<FloatType, Architecture>::
 
   auto pdf_field = bc->block->template getData<PdfField>(m_pdf_field_id[0]);
   auto force_field =
-      bc->block->template getData<VectorField>(m_last_applied_force_field_id);
+      bc->block->template getData<VectorField>(m_last_applied_force_field_id[0]);
   auto vel_field =
       bc->block->template getData<VectorField>(m_velocity_field_id);
   std::array<FloatType, Stencil::Size> pop;
@@ -162,7 +162,7 @@ LBWalberlaImplSingleComponent<FloatType, Architecture>::
     return std::nullopt;
 
   auto field =
-      bc->block->template getData<VectorField>(m_force_to_be_applied_id);
+      bc->block->template getData<VectorField>(m_force_to_be_applied_id[0]);
   auto const vec = lbm::accessor::Vector::get(field, bc->cell);
   return zero_centered_to_md(to_vector3d(vec));
 }
@@ -178,7 +178,7 @@ LBWalberlaImplSingleComponent<FloatType, Architecture>::
     return std::nullopt;
 
   auto const field =
-      bc->block->template getData<VectorField>(m_last_applied_force_field_id);
+      bc->block->template getData<VectorField>(m_last_applied_force_field_id[0]);
   auto const vec = lbm::accessor::Vector::get(field, bc->cell);
   return zero_centered_to_md(to_vector3d(vec));
 }
@@ -195,7 +195,7 @@ bool LBWalberlaImplSingleComponent<FloatType, Architecture>::
 
   auto pdf_field = bc->block->template getData<PdfField>(m_pdf_field_id[0]);
   auto force_field =
-      bc->block->template getData<VectorField>(m_last_applied_force_field_id);
+      bc->block->template getData<VectorField>(m_last_applied_force_field_id[0]);
   auto vel_field =
       bc->block->template getData<VectorField>(m_velocity_field_id);
   auto const vec = to_vector3<FloatType>(force);

@@ -72,7 +72,7 @@ bool LBWalberlaImplColorGradient<FloatType, Architecture>::set_node_velocity(
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>
-std::optional<double>
+std::optional<std::vector<double>>
 LBWalberlaImplColorGradient<FloatType, Architecture>::get_node_density(
     Utils::Vector3i const &node, bool consider_ghosts) const {
   assert(not(consider_ghosts and m_pending_ghost_comm.test(GhostComm::PDF)));
@@ -84,40 +84,13 @@ LBWalberlaImplColorGradient<FloatType, Architecture>::get_node_density(
       bc->block->template uncheckedFastGetData<ScalarField>(m_rho_field_id[0]);
   auto const rho_b_field =
       bc->block->template uncheckedFastGetData<ScalarField>(m_rho_field_id[1]);
-  return double_c(rho_a_field->get(bc->cell)) +
-         double_c(rho_b_field->get(bc->cell));
-}
-
-template <typename FloatType, lbmpy::Arch Architecture>
-bool LBWalberlaImplColorGradient<FloatType, Architecture>::set_node_density(
-    Utils::Vector3i const &node, double /* density */) {
-  throw std::runtime_error(
-      "on color-gradient LB, use set_node_component_densities to set "
-      "per-component densities");
-}
-
-template <typename FloatType, lbmpy::Arch Architecture>
-std::optional<std::array<double, 2>>
-LBWalberlaImplColorGradient<FloatType, Architecture>::
-    get_node_component_densities(Utils::Vector3i const &node,
-                                 bool consider_ghosts) const {
-  assert(not(consider_ghosts and m_pending_ghost_comm.test(GhostComm::PDF)));
-  auto bc = get_block_and_cell(get_lattice(), node, consider_ghosts);
-  if (!bc)
-    return std::nullopt;
-
-  auto const rho_a_field =
-      bc->block->template uncheckedFastGetData<ScalarField>(m_rho_field_id[0]);
-  auto const rho_b_field =
-      bc->block->template uncheckedFastGetData<ScalarField>(m_rho_field_id[1]);
-  return std::array<double, 2>{double_c(rho_a_field->get(bc->cell)),
+  return std::vector<double>{double_c(rho_a_field->get(bc->cell)),
                                double_c(rho_b_field->get(bc->cell))};
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>
-bool LBWalberlaImplColorGradient<FloatType, Architecture>::
-    set_node_component_densities(Utils::Vector3i const &node,
-                                 std::array<double, 2> const &rho) {
+bool LBWalberlaImplColorGradient<FloatType, Architecture>::set_node_density(
+    Utils::Vector3i const &node, std::vector<double> const &rho) {
   m_pending_ghost_comm.set(GhostComm::PDF);
   auto bc = get_block_and_cell(get_lattice(), node, false);
   if (!bc)
@@ -166,7 +139,7 @@ bool LBWalberlaImplColorGradient<FloatType, Architecture>::set_node_population(
   auto pdf_field_a = bc->block->template getData<PdfField>(m_pdf_field_id[0]);
   auto pdf_field_b = bc->block->template getData<PdfField>(m_pdf_field_id[1]);
   auto force_field =
-      bc->block->template getData<VectorField>(m_last_applied_force_field_id);
+      bc->block->template getData<VectorField>(m_last_applied_force_field_id[0]);
   auto vel_field =
       bc->block->template getData<VectorField>(m_velocity_field_id);
   std::array<FloatType, Stencil::Size> pop_a;
@@ -204,6 +177,8 @@ template <typename FloatType, lbmpy::Arch Architecture>
 bool LBWalberlaImplColorGradient<FloatType, Architecture>::
     set_node_last_applied_force(Utils::Vector3i const &node,
                                 Utils::Vector3d const &force) {
+  throw std::runtime_error(
+      "set_node_last_applied_force is not implemented for two-component LB");
   m_pending_ghost_comm.set(GhostComm::VEL);
   m_pending_ghost_comm.set(GhostComm::LAF);
   auto bc = get_block_and_cell(get_lattice(), node, false);
@@ -212,7 +187,7 @@ bool LBWalberlaImplColorGradient<FloatType, Architecture>::
 
   auto pdf_field = bc->block->template getData<PdfField>(m_pdf_field_id[0]);
   auto force_field =
-      bc->block->template getData<VectorField>(m_last_applied_force_field_id);
+      bc->block->template getData<VectorField>(m_last_applied_force_field_id[0]);
   auto vel_field =
       bc->block->template getData<VectorField>(m_velocity_field_id);
   auto const vec = to_vector3<FloatType>(force);

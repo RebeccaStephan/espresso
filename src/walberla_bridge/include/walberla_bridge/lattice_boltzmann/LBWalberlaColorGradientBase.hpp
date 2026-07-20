@@ -52,17 +52,6 @@ public:
       std::vector<Utils::Vector3d> const &pos,
       std::vector<double> const &delta_mus) = 0;
 
-  // per-component density accessors
-  virtual std::optional<std::array<double, 2>>
-  get_node_component_densities(Utils::Vector3i const &node,
-                               bool consider_ghosts = false) const = 0;
-  virtual bool
-  set_node_component_densities(Utils::Vector3i const &node,
-                               std::array<double, 2> const &rho) = 0;
-  virtual std::vector<double>
-  get_slice_component_densities(Utils::Vector3i const &lower,
-                                Utils::Vector3i const &upper) const = 0;
-
   // per-component viscosity
   virtual void set_component_viscosities(std::array<double, 2> const &nu) = 0;
   [[nodiscard]] virtual std::array<double, 2>

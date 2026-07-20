@@ -175,13 +175,13 @@ public:
                                   std::vector<double> const &velocity) = 0;
 
   /** @brief Get node density. */
-  virtual std::optional<double>
+  virtual std::optional<std::vector<double>>
   get_node_density(Utils::Vector3i const &node,
                    bool consider_ghosts = false) const = 0;
 
   /** @brief Set node density. */
   virtual bool set_node_density(Utils::Vector3i const &node,
-                                double density) = 0;
+                                std::vector<double> const &density) = 0;
 
   /** @brief Get slice density. */
   virtual std::vector<double>

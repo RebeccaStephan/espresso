@@ -436,15 +436,6 @@ class LBFluidNode(ScriptInterfaceHelper):
         self.call_method("set_density", value=value)
 
     @property
-    def component_densities(self):
-        """Per-component density for color-gradient LB. Returns a length-2 array."""
-        return self.call_method("get_component_densities")
-
-    @component_densities.setter
-    def component_densities(self, value):
-        self.call_method("set_component_densities", value=list(value))
-
-    @property
     def _population(self):
         return utils.array_locked(self.call_method("get_population"))
 
