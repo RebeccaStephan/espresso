@@ -136,7 +136,8 @@ public:
     m_shape_val["velocity"] = {3};
     m_shape_val["velocity_at_boundary"] = {1};
     m_shape_val["is_boundary"] = {1};
-    m_shape_val["last_applied_force"] = {3};
+    m_shape_val["last_applied_force"] =
+        color_gradient ? std::vector<int>{2, 3} : std::vector<int>{3};
     m_shape_val["pressure_tensor"] = {3, 3};
     m_shape_val["pressure_tensor_neq"] = {3, 3};
   }

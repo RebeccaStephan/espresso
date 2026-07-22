@@ -136,11 +136,14 @@ Variant LBFluidSlice::do_call_method(std::string const &name,
     return variant;
   }
   if (name == "get_last_applied_force") {
-    return call(&LatticeModel::get_slice_last_applied_force, {3},
+    auto const laf_size = m_shape_val.at("last_applied_force");
+    return call(&LatticeModel::get_slice_last_applied_force, laf_size,
                 1. / m_conv_force);
   }
   if (name == "set_last_applied_force") {
-    return call(&LatticeModel::set_slice_last_applied_force, {3}, m_conv_force);
+    auto const laf_size = m_shape_val.at("last_applied_force");
+    return call(&LatticeModel::set_slice_last_applied_force, laf_size,
+               m_conv_force);
   }
 
   return {};

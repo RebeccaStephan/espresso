@@ -89,22 +89,25 @@ std::vector<double> LBWalberlaImplColorGradient<FloatType, Architecture>::
       [&](auto const &block, auto const &bci, auto const &ci,
           auto const &block_offset) {
         if (out.empty())
-          out.resize(3u * ci.numCells());
-        auto const field =
+          out.resize(6u * ci.numCells());
+        auto const field_a =
             block.template getData<VectorField>(m_last_applied_force_field_id[0]);
-        auto const values = lbm::accessor::Vector::get(field, bci);
+        auto const field_b =
+            block.template getData<VectorField>(m_last_applied_force_field_id[1]);
+        auto const values_a = lbm::accessor::Vector::get(field_a, bci);
+        auto const values_b = lbm::accessor::Vector::get(field_b, bci);
 
-        auto kernel = [&values, &out](unsigned const block_index,
-                                      unsigned const local_index,
-                                      Utils::Vector3i const &) {
+        auto kernel = [&values_a, &values_b, &out](unsigned const block_index,
+                                                    unsigned const local_index,
+                                                    Utils::Vector3i const &) {
           for (uint_t f = 0u; f < 3u; ++f) {
-            out[3u * local_index + f] = values[3u * block_index + f];
+            out[6u * local_index + f] = values_a[3u * block_index + f];
+            out[6u * local_index + 3u + f] = values_b[3u * block_index + f];
           }
         };
 
         copy_block_buffer(bci, ci, block_offset, lower_corner, kernel);
       });
-  zero_centered_to_md_in_place(out);
   return out;
 }
 
@@ -113,32 +116,33 @@ void LBWalberlaImplColorGradient<FloatType, Architecture>::
     set_slice_last_applied_force(Utils::Vector3i const &lower_corner,
                                  Utils::Vector3i const &upper_corner,
                                  std::vector<double> const &force) {
-  m_pending_ghost_comm.set(GhostComm::VEL);
   m_pending_ghost_comm.set(GhostComm::LAF);
   for_each_block_in_slice(
       get_lattice(), lower_corner, upper_corner,
       [&](auto &block, auto const &bci, auto const &ci,
           auto const &block_offset) {
-        assert(force.size() == 3u * ci.numCells());
-        auto pdf_field = block.template getData<PdfField>(m_pdf_field_id[0]);
-        auto force_field =
+        assert(force.size() == 6u * ci.numCells());
+        auto force_field_a =
             block.template getData<VectorField>(m_last_applied_force_field_id[0]);
-        auto vel_field =
-            block.template getData<VectorField>(m_velocity_field_id);
-        std::vector<FloatType> values(3u * bci.numCells());
+        auto force_field_b =
+            block.template getData<VectorField>(m_last_applied_force_field_id[1]);
+        std::vector<FloatType> values_a(3u * bci.numCells());
+        std::vector<FloatType> values_b(3u * bci.numCells());
 
-        auto kernel = [&values, &force](unsigned const block_index,
-                                        unsigned const local_index,
-                                        Utils::Vector3i const &) {
+        auto kernel = [&values_a, &values_b, &force](
+                          unsigned const block_index, unsigned const local_index,
+                          Utils::Vector3i const &) {
           for (uint_t f = 0u; f < 3u; ++f) {
-            values[3u * block_index + f] =
-                numeric_cast<FloatType>(force[3u * local_index + f]);
+            values_a[3u * block_index + f] =
+                numeric_cast<FloatType>(force[6u * local_index + f]);
+            values_b[3u * block_index + f] =
+                numeric_cast<FloatType>(force[6u * local_index + 3u + f]);
           }
         };
 
         copy_block_buffer(bci, ci, block_offset, lower_corner, kernel);
-        lbm::accessor::Force::set(pdf_field, vel_field, force_field, values,
-                                  m_density, bci);
+        lbm::accessor::Vector::set(force_field_a, values_a, bci);
+        lbm::accessor::Vector::set(force_field_b, values_b, bci);
       });
 }
 
