@@ -303,7 +303,10 @@ public:
   /** @brief Get the velocity field id */
   [[nodiscard]] virtual std::size_t get_velocity_field_id() const noexcept = 0;
 
-  /** @brief Get the force field id */
+  /** @brief Get the force field id. Used by EK to read the LB force field
+   *  for friction coupling (see @ref EK::EKWalberla::propagate). On
+   *  two-component (color-gradient) LB, this is component a's force field
+   *  only — EK friction coupling with two-component LB is not supported. */
   [[nodiscard]] virtual std::size_t get_force_field_id() const noexcept = 0;
 
   /** @brief Get whether the kernels run on GPUs. */

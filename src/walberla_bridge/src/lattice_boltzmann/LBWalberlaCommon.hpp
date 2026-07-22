@@ -259,6 +259,8 @@ public:
   }
 
   [[nodiscard]] std::size_t get_force_field_id() const noexcept override {
+    // component a only on two-component (color-gradient) LB; see the
+    // doc comment on LBWalberlaBase::get_force_field_id
     return derived().m_force_to_be_applied_id[0];
   }
 
