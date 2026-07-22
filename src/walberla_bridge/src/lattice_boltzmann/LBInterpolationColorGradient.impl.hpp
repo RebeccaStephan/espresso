@@ -43,95 +43,16 @@
 namespace walberla {
 
 /**
- * @brief Distribute forces to the lattice at given positions.
- * Uses B-spline interpolation to spread each force over the surrounding
- * lattice nodes.
+ * @brief Distribute forces density-weighted to the two component lattices
+ * at given positions. Uses B-spline interpolation to spread each force
+ * over the surrounding lattice nodes, split between components by local
+ * rho_a/rho_b. Writes into force_to_be_applied (double-buffered). GPU
+ * not implemented.
  */
 template <typename FloatType, lbmpy::Arch Architecture>
 void LBWalberlaImplColorGradient<FloatType, Architecture>::add_forces_at_pos(
     std::vector<Utils::Vector3d> const &pos,
     std::vector<Utils::Vector3d> const &forces) {
-  assert(pos.size() == forces.size());
-  if (pos.empty()) {
-    return;
-  }
-  if constexpr (Architecture == lbmpy::Arch::CPU) {
-    auto const kernel = make_force_interpolation_kernel();
-    for (std::size_t i = 0ul; i < pos.size(); ++i) {
-      kernel(pos[i], forces[i]);
-    }
-  }
-#if defined(__CUDACC__) and defined(WALBERLA_BUILD_WITH_CUDA)
-  if constexpr (Architecture == lbmpy::Arch::GPU) {
-    auto const &lattice = get_lattice();
-    auto const &block = *(lattice.get_blocks()->begin());
-    auto const origin = block.getAABB().min();
-    std::vector<FloatType> host_pos;
-    std::vector<FloatType> host_force;
-    host_pos.reserve(3ul * pos.size());
-    host_force.reserve(3ul * forces.size());
-    assert(lattice.get_blocks()->getNumberOfBlocks() == 1u);
-    for (auto const &vec : pos) {
-#pragma unroll
-      for (std::size_t i : {0ul, 1ul, 2ul}) {
-        host_pos.emplace_back(static_cast<FloatType>(vec[i] - origin[i]));
-      }
-    }
-    for (auto const &vec : forces) {
-#pragma unroll
-      for (std::size_t i : {0ul, 1ul, 2ul}) {
-        host_force.emplace_back(static_cast<FloatType>(vec[i]));
-      }
-    }
-    zero_centered_to_lb_in_place(host_force);
-    auto const gl = lattice.get_ghost_layers();
-    auto field = block.template uncheckedFastGetData<VectorField>(
-        m_force_to_be_applied_id[0]);
-    lbm::accessor::Interpolation::add_force(field, host_pos, host_force, gl);
-  }
-#endif
-}
-
-template <typename FloatType, lbmpy::Arch Architecture>
-auto LBWalberlaImplColorGradient<
-    FloatType, Architecture>::make_force_interpolation_kernel() const {
-  auto const &lattice = *m_lattice;
-  auto const &blocks = *lattice.get_blocks();
-  assert(lattice.get_ghost_layers() == 1u);
-  return [&](Utils::Vector3d const &pos, Utils::Vector3d const &force) {
-    if (not get_block_extended(lattice, pos, 1u)) {
-      return;
-    }
-    interpolate_bspline_at_pos(
-        pos, [&, conv = m_zc_to_lb, field_id = m_force_to_be_applied_id[0]](
-                 std::array<int, 3> const node, double weight) {
-          auto block = get_block_extended(lattice, node, 0u);
-          if (!block)
-            block = get_block_extended(lattice, node, 1u);
-          if (block) {
-            auto cell = to_cell(node);
-            blocks.transformGlobalToBlockLocalCell(cell, *block);
-            weight *= conv;
-            auto const weighted_force = to_vector3<FloatType>(weight * force);
-            auto field =
-                block->template uncheckedFastGetData<VectorField>(field_id);
-            lbm::accessor::Vector::add(field, weighted_force, cell);
-          }
-        });
-  };
-}
-
-/**
- * @brief Distribute forces density-weighted to the two lattices
- * for the two components at given positions.
- * Uses B-spline interpolation to spread each force over the surrounding
- * lattice nodes. GPU not implemented.
- */
-template <typename FloatType, lbmpy::Arch Architecture>
-void LBWalberlaImplColorGradient<FloatType, Architecture>::
-    add_density_weighted_forces_at_pos(
-        std::vector<Utils::Vector3d> const &pos,
-        std::vector<Utils::Vector3d> const &forces) {
   assert(pos.size() == forces.size());
   if (pos.empty()) {
     return;
@@ -422,8 +343,11 @@ LBWalberlaImplColorGradient<FloatType, Architecture>::
 template <typename FloatType, lbmpy::Arch Architecture>
 bool LBWalberlaImplColorGradient<FloatType, Architecture>::add_force_at_pos(
     Utils::Vector3d const &pos, Utils::Vector3d const &force) {
-  throw std::runtime_error(
-      "add_force_at_pos is not implemented for two-component LB");
+  if (!m_lattice->pos_in_local_halo(pos))
+    return false;
+  auto const kernel = make_density_weighted_force_interpolation_kernel();
+  kernel(pos, force);
+  return true;
 }
 
 } // namespace walberla
