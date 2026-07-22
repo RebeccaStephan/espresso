@@ -88,7 +88,7 @@ BOOST_DATA_TEST_CASE(initial_state, bdata::make(all_lbs()), lb_generator) {
       BOOST_CHECK((*lb->get_node_force_to_be_applied(node)) == Vector3d{});
       BOOST_CHECK((*lb->get_node_last_applied_force(node)) == Vector3d{});
       BOOST_CHECK((*lb->get_node_velocity(node)) == Vector3d{});
-      BOOST_CHECK_CLOSE((*lb->get_node_density(node)), params.density, 1E-10);
+      BOOST_CHECK_CLOSE((*lb->get_node_density(node))[0], params.density, 1E-10);
       BOOST_CHECK_LE((*lb->get_node_pressure_tensor(node) - pressure).norm(),
                      1E-9);
     }
@@ -372,10 +372,10 @@ BOOST_DATA_TEST_CASE(density_at_pos, bdata::make(all_lbs()), lb_generator) {
   // Assign densities
   for (auto const &node : all_nodes_incl_ghosts(lb->get_lattice())) {
     if (lb->get_lattice().node_in_local_domain(node)) {
-      BOOST_CHECK(lb->set_node_density(node, n_dens(node)));
+      BOOST_CHECK(lb->set_node_density(node, {n_dens(node)}));
     } else {
       // Check that access to node density is not possible
-      BOOST_CHECK(!lb->set_node_density(node, 0.));
+      BOOST_CHECK(!lb->set_node_density(node, {0.}));
     }
   }
 
@@ -386,14 +386,14 @@ BOOST_DATA_TEST_CASE(density_at_pos, bdata::make(all_lbs()), lb_generator) {
     auto constexpr eps = 1E-8;
     if (lb->get_lattice().node_in_local_halo(node)) {
       if (lb->get_lattice().node_in_local_domain(node)) {
-        auto res = lb->get_node_density(node);
-        BOOST_REQUIRE(res);                          // value available?
-        BOOST_CHECK_SMALL(*res - n_dens(node), eps); // value correct?
+        auto const res = lb->get_node_density(node);
+        BOOST_REQUIRE(res);                               // value available?
+        BOOST_CHECK_SMALL((*res)[0] - n_dens(node), eps); // value correct?
         // Check that the interpolated density at the node pos equals the node
         // density
-        res = lb->get_density_at_pos(n_pos(node));
-        BOOST_REQUIRE(res);                          // value available?
-        BOOST_CHECK_SMALL(*res - n_dens(node), eps); // value correct?
+        auto const res_pos = lb->get_density_at_pos(n_pos(node));
+        BOOST_REQUIRE(res_pos);                           // value available?
+        BOOST_CHECK_SMALL(*res_pos - n_dens(node), eps);  // value correct?
       } else {
         BOOST_CHECK(!lb->get_node_density(node));
         BOOST_CHECK(!lb->get_density_at_pos(n_pos(node), false));

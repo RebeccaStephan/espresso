@@ -226,7 +226,7 @@ template <typename FT, lbmpy::Arch Architecture> struct Fixture {
     auto velocity_field =
         block.template getData<VectorField>(lbfluid->m_velocity_field_id);
     auto force_field = block.template getData<VectorField>(
-        lbfluid->m_last_applied_force_field_id);
+        lbfluid->m_last_applied_force_field_id[0]);
 
     std::conditional_t<is_interval, std::vector<FT>, std::array<FT, 19u>>
         cur_pop = lbm::accessor::Population::get(pdf_field, it);
