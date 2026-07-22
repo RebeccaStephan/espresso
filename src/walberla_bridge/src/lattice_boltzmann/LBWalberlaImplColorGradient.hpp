@@ -608,8 +608,6 @@ public:
 private:
   // ---- Interpolation (position-based access, leaf-specific) ----
 
-  /** @brief Return a B-spline interpolation kernel for force distribution. */
-  auto make_force_interpolation_kernel() const;
   /** @brief Return a density_weighted B-spline interpolation kernel for force
    * distribution in two component LB. */
   auto make_density_weighted_force_interpolation_kernel() const;
@@ -624,12 +622,8 @@ public:
                         Utils::Vector3d const &force) override;
   void add_forces_at_pos(std::vector<Utils::Vector3d> const &pos,
                          std::vector<Utils::Vector3d> const &forces) override;
-  void add_density_weighted_forces_at_pos(
-      std::vector<Utils::Vector3d> const &pos,
-      std::vector<Utils::Vector3d> const &forces) override;
-  void
-  add_solvation_forces_at_pos(std::vector<Utils::Vector3d> const &pos,
-                              std::vector<double> const &delta_mus) override;
+  void add_solvation_forces_at_pos(std::vector<Utils::Vector3d> const &pos,
+                                   std::vector<double> const &delta_mus) override;
   std::vector<Utils::Vector3d>
   get_solvation_particle_forces_at_pos(
       std::vector<Utils::Vector3d> const &pos,
