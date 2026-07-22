@@ -76,7 +76,7 @@ BOOST_DATA_TEST_CASE(integrate_with_point_force_thermalized,
   lb->ghost_communication();
   for (auto const &n : all_nodes_incl_ghosts(lb->get_lattice())) {
     if (lb->get_lattice().node_in_local_halo(n)) {
-      auto const laf = *(lb->get_node_last_applied_force(n, true));
+      auto const laf = (*(lb->get_node_last_applied_force(n, true)))[0];
       if (n == force_node) {
         BOOST_CHECK_SMALL((laf - f1 - f2).norm(), 1E-10);
       } else {

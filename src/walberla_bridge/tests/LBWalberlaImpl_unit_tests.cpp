@@ -85,8 +85,8 @@ BOOST_DATA_TEST_CASE(initial_state, bdata::make(all_lbs()), lb_generator) {
     auto const consider_ghosts = !lb->get_lattice().node_in_local_domain(node);
     BOOST_CHECK(!(*lb->get_node_is_boundary(node, consider_ghosts)));
     if (lb->get_lattice().node_in_local_domain(node)) {
-      BOOST_CHECK((*lb->get_node_force_to_be_applied(node)) == Vector3d{});
-      BOOST_CHECK((*lb->get_node_last_applied_force(node)) == Vector3d{});
+      BOOST_CHECK((*lb->get_node_force_to_be_applied(node))[0] == Vector3d{});
+      BOOST_CHECK((*lb->get_node_last_applied_force(node))[0] == Vector3d{});
       BOOST_CHECK((*lb->get_node_velocity(node)) == Vector3d{});
       BOOST_CHECK_CLOSE((*lb->get_node_density(node))[0], params.density, 1E-10);
       BOOST_CHECK_LE((*lb->get_node_pressure_tensor(node) - pressure).norm(),
@@ -459,7 +459,7 @@ BOOST_DATA_TEST_CASE(forces_interpolation, bdata::make(all_lbs()),
               auto const weight = (check_node[dir] == n[dir]) ? 16. / 3. : 16.;
               if (lb->get_lattice().node_in_local_halo(check_node)) {
                 auto const res = lb->get_node_force_to_be_applied(check_node);
-                BOOST_CHECK_SMALL(((*res) - f / weight).norm(), 1E-10);
+                BOOST_CHECK_SMALL(((*res)[0] - f / weight).norm(), 1E-10);
               }
             }
           }
@@ -477,12 +477,12 @@ BOOST_DATA_TEST_CASE(last_applied_forces_setters, bdata::make(all_lbs()),
 
   for (auto const &n : all_nodes_incl_ghosts(lb->get_lattice(), false)) {
     auto const f = Vector3d{{static_cast<double>(n[0] + 2), 2., -3.5}};
-    lb->set_node_last_applied_force(n, f);
+    lb->set_node_last_applied_force(n, {f});
     lb->ghost_communication_laf();
     lb->ghost_communication_vel();
     if (lb->get_lattice().node_in_local_halo(n)) {
       auto const res = lb->get_node_last_applied_force(n, true);
-      BOOST_CHECK_SMALL(((*res) - f).norm(), 1E-10);
+      BOOST_CHECK_SMALL(((*res)[0] - f).norm(), 1E-10);
     }
   }
 }
@@ -505,7 +505,7 @@ BOOST_DATA_TEST_CASE(forces_book_keeping, bdata::make(all_lbs()),
     if (lb->get_lattice().node_in_local_domain(n)) {
       lb->add_force_at_pos(n + Vector3d::broadcast(.5), f);
       lb->ghost_communication();
-      BOOST_CHECK_SMALL((*(lb->get_node_force_to_be_applied(n)) - f).norm(),
+      BOOST_CHECK_SMALL(((*(lb->get_node_force_to_be_applied(n)))[0] - f).norm(),
                         1E-10);
     } else {
       lb->ghost_communication();
@@ -517,8 +517,9 @@ BOOST_DATA_TEST_CASE(forces_book_keeping, bdata::make(all_lbs()),
                     n + Vector3i{{params.grid_dimensions[0], 0, 0}}}) {
       if (lb->get_lattice().node_in_local_halo(cn)) {
         BOOST_CHECK_SMALL(
-            (*(lb->get_node_last_applied_force(cn, true)) - f).norm(), 1E-10);
-        BOOST_CHECK_SMALL((*(lb->get_node_force_to_be_applied(cn))).norm(),
+            ((*(lb->get_node_last_applied_force(cn, true)))[0] - f).norm(),
+            1E-10);
+        BOOST_CHECK_SMALL((*(lb->get_node_force_to_be_applied(cn)))[0].norm(),
                           1E-10);
       }
     }
@@ -527,9 +528,9 @@ BOOST_DATA_TEST_CASE(forces_book_keeping, bdata::make(all_lbs()),
     for (auto cn : {n, n + params.grid_dimensions, n - params.grid_dimensions,
                     n + Vector3i{{params.grid_dimensions[0], 0, 0}}}) {
       if (lb->get_lattice().node_in_local_halo(cn)) {
-        BOOST_CHECK_SMALL((*(lb->get_node_last_applied_force(cn, true))).norm(),
-                          1E-10);
-        BOOST_CHECK_SMALL((*(lb->get_node_force_to_be_applied(cn))).norm(),
+        BOOST_CHECK_SMALL(
+            (*(lb->get_node_last_applied_force(cn, true)))[0].norm(), 1E-10);
+        BOOST_CHECK_SMALL((*(lb->get_node_force_to_be_applied(cn)))[0].norm(),
                           1E-10);
       }
     }
@@ -563,7 +564,7 @@ BOOST_DATA_TEST_CASE(force_in_corner, bdata::make(all_lbs()), lb_generator) {
   for (auto const &c : corner_nodes(params.grid_dimensions)) {
     auto const res = lb->get_node_force_to_be_applied(c);
     if (res) {
-      BOOST_CHECK_SMALL(((*res) - f / 8.).norm(), tol);
+      BOOST_CHECK_SMALL(((*res)[0] - f / 8.).norm(), tol);
       ++count_local;
     }
   };
@@ -578,7 +579,7 @@ BOOST_DATA_TEST_CASE(force_in_corner, bdata::make(all_lbs()), lb_generator) {
   for (auto const &c : corner_nodes(params.grid_dimensions)) {
     auto const res = lb->get_node_last_applied_force(c);
     if (res) {
-      BOOST_CHECK_SMALL(((*res) - f / 8.).norm(), tol);
+      BOOST_CHECK_SMALL(((*res)[0] - f / 8.).norm(), tol);
       ++count_local;
     }
   };

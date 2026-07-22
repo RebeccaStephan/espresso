@@ -71,7 +71,7 @@ BOOST_DATA_TEST_CASE(force_interpolation_bspline, bdata::make(all_lbs()),
             Vector3i const check_node{{n[0] - x, n[1] - y, n[2] - z}};
             if (lb->get_lattice().node_in_local_halo(check_node)) {
               auto const res = lb->get_node_force_to_be_applied(check_node);
-              sum += *res;
+              sum += (*res)[0];
             }
           }
         }
@@ -155,9 +155,9 @@ BOOST_DATA_TEST_CASE(force_interpolation_ghosts, bdata::make(all_lbs()),
         if (lb->get_lattice().node_in_local_halo(check_node)) {
           auto const res = lb->get_node_force_to_be_applied(check_node);
           if (x <= 0 and y <= 0 and z <= 0) {
-            BOOST_CHECK_SMALL(((*res) - force / 4.).norm(), 1E-10);
+            BOOST_CHECK_SMALL(((*res)[0] - force / 4.).norm(), 1E-10);
           } else {
-            BOOST_CHECK_SMALL((*res).norm(), 1E-10);
+            BOOST_CHECK_SMALL((*res)[0].norm(), 1E-10);
           }
         }
       }
@@ -174,9 +174,9 @@ BOOST_DATA_TEST_CASE(force_interpolation_ghosts, bdata::make(all_lbs()),
         if (lb->get_lattice().node_in_local_halo(check_node)) {
           auto const res = lb->get_node_last_applied_force(check_node, true);
           if (x == 0 and y == 0 and z == 0) {
-            BOOST_CHECK_SMALL(((*res) - force / 4.).norm(), 1E-10);
+            BOOST_CHECK_SMALL(((*res)[0] - force / 4.).norm(), 1E-10);
           } else {
-            BOOST_CHECK_SMALL((*res).norm(), 1E-10);
+            BOOST_CHECK_SMALL((*res)[0].norm(), 1E-10);
           }
         }
       }

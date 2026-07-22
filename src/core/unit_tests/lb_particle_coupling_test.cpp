@@ -153,7 +153,7 @@ static auto get_force_to_be_applied(Utils::Vector3d const &pos) {
          << "on MPI rank " << comm.rank() << ": position = [" << pos << "]";
     throw std::runtime_error(what.str());
   }
-  return *res;
+  return (*res)[0];
 }
 } // namespace LB
 

@@ -121,17 +121,17 @@ BOOST_AUTO_TEST_CASE(test_interpolation_force) {
   lb->integrate();
   lb->ghost_communication_laf();
   auto const ghost_node = Vector3i{force_node[0] - offset, -1, force_node[2]};
-  auto const laf = *(lb->get_node_last_applied_force(ghost_node, true));
+  auto const laf = (*(lb->get_node_last_applied_force(ghost_node, true)))[0];
   BOOST_CHECK_SMALL((laf - f1).norm(), 1E-10);
 
   // check setter
   auto const f = Vector3d{{0.1, 0.2, -0.3}};
-  lb->set_node_last_applied_force(force_node, f);
+  lb->set_node_last_applied_force(force_node, {f});
 
   lb->ghost_communication_laf();
   lb->ghost_communication_vel();
 
-  auto const ghost_laf = *(lb->get_node_last_applied_force(ghost_node, true));
+  auto const ghost_laf = (*(lb->get_node_last_applied_force(ghost_node, true)))[0];
   BOOST_CHECK_SMALL((ghost_laf - f).norm(), 1E-10);
 }
 
