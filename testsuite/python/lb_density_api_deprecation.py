@@ -75,13 +75,10 @@ class TestLBColorGradientDensityAccessor(ut.TestCase):
     def tearDown(self):
         system.lb = None
 
-    def test_total_density_is_scalar(self):
+    def test_density_is_length_two(self):
         rho = self.lbf[0, 0, 0].density
-        self.assertAlmostEqual(float(rho), 1.0, places=10)
-
-    def test_component_densities_is_length_two(self):
-        rho_ab = self.lbf[0, 0, 0].component_densities
-        self.assertEqual(len(rho_ab), 2)
+        self.assertEqual(len(rho), 2)
+        self.assertAlmostEqual(float(np.sum(rho)), 1.0, places=10)
 
 
 if __name__ == "__main__":
