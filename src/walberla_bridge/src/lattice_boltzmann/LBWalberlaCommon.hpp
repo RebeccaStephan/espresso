@@ -404,7 +404,10 @@ public:
     if (!bc or !m_boundary->node_is_boundary(node))
       return std::nullopt;
 
-    return this->get_node_last_applied_force(node, true);
+    auto const laf = this->get_node_last_applied_force(node, true);
+    if (!laf)
+      return std::nullopt;
+    return laf->front(); // component a (SC: the only one; CG boundaries N/A)
   }
 
   bool remove_node_from_boundary(Utils::Vector3i const &node) override {

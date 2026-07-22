@@ -157,42 +157,59 @@ bool LBWalberlaImplColorGradient<FloatType, Architecture>::set_node_population(
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>
-std::optional<Utils::Vector3d>
+std::optional<std::vector<Utils::Vector3d>>
 LBWalberlaImplColorGradient<FloatType, Architecture>::
     get_node_force_to_be_applied(Utils::Vector3i const &node) const {
-  throw std::runtime_error(
-      "get_node_force_to_be_applied is not implemented for two-component LB");
+  auto const bc = get_block_and_cell(get_lattice(), node, true);
+  if (!bc)
+    return std::nullopt;
+  auto const field_a =
+      bc->block->template getData<VectorField>(m_force_to_be_applied_id[0]);
+  auto const field_b =
+      bc->block->template getData<VectorField>(m_force_to_be_applied_id[1]);
+  return std::vector<Utils::Vector3d>{
+      to_vector3d(lbm::accessor::Vector::get(field_a, bc->cell)),
+      to_vector3d(lbm::accessor::Vector::get(field_b, bc->cell))};
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>
-std::optional<Utils::Vector3d>
+std::optional<std::vector<Utils::Vector3d>>
 LBWalberlaImplColorGradient<FloatType, Architecture>::
     get_node_last_applied_force(Utils::Vector3i const &node,
                                 bool consider_ghosts) const {
-  throw std::runtime_error(
-      "get_node_last_applied_force is not implemented for two-component LB");
+  assert(not(consider_ghosts and m_pending_ghost_comm.test(GhostComm::LAF)));
+  auto const bc = get_block_and_cell(get_lattice(), node, consider_ghosts);
+  if (!bc)
+    return std::nullopt;
+  auto const field_a =
+      bc->block->template getData<VectorField>(m_last_applied_force_field_id[0]);
+  auto const field_b =
+      bc->block->template getData<VectorField>(m_last_applied_force_field_id[1]);
+  return std::vector<Utils::Vector3d>{
+      to_vector3d(lbm::accessor::Vector::get(field_a, bc->cell)),
+      to_vector3d(lbm::accessor::Vector::get(field_b, bc->cell))};
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>
 bool LBWalberlaImplColorGradient<FloatType, Architecture>::
     set_node_last_applied_force(Utils::Vector3i const &node,
-                                Utils::Vector3d const &force) {
-  throw std::runtime_error(
-      "set_node_last_applied_force is not implemented for two-component LB");
-  m_pending_ghost_comm.set(GhostComm::VEL);
+                                std::vector<Utils::Vector3d> const &force) {
   m_pending_ghost_comm.set(GhostComm::LAF);
   auto bc = get_block_and_cell(get_lattice(), node, false);
   if (!bc)
     return false;
 
-  auto pdf_field = bc->block->template getData<PdfField>(m_pdf_field_id[0]);
-  auto force_field =
+  // CG has no standalone velocity-set accessor (velocity is produced inside
+  // the fused collide/stream kernels), so unlike SC we cannot use Force::set;
+  // write the field directly. The stored velocity re-derives on next integrate.
+  auto force_field_a =
       bc->block->template getData<VectorField>(m_last_applied_force_field_id[0]);
-  auto vel_field =
-      bc->block->template getData<VectorField>(m_velocity_field_id);
-  auto const vec = to_vector3<FloatType>(force);
-  lbm::accessor::Force::set(pdf_field, vel_field, force_field, vec, m_density,
-                            bc->cell);
+  auto force_field_b =
+      bc->block->template getData<VectorField>(m_last_applied_force_field_id[1]);
+  lbm::accessor::Vector::set(force_field_a, to_vector3<FloatType>(force[0]),
+                             bc->cell);
+  lbm::accessor::Vector::set(force_field_b, to_vector3<FloatType>(force[1]),
+                             bc->cell);
 
   return true;
 }

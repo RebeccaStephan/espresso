@@ -562,13 +562,14 @@ public:
                             std::vector<double> const &population) override;
 
   // Force
-  std::optional<Utils::Vector3d>
+  std::optional<std::vector<Utils::Vector3d>>
   get_node_force_to_be_applied(Utils::Vector3i const &node) const override;
-  std::optional<Utils::Vector3d>
+  std::optional<std::vector<Utils::Vector3d>>
   get_node_last_applied_force(Utils::Vector3i const &node,
                               bool consider_ghosts = false) const override;
-  bool set_node_last_applied_force(Utils::Vector3i const &node,
-                                   Utils::Vector3d const &force) override;
+  bool set_node_last_applied_force(
+      Utils::Vector3i const &node,
+      std::vector<Utils::Vector3d> const &force) override;
   std::vector<double> get_slice_last_applied_force(
       Utils::Vector3i const &lower_corner,
       Utils::Vector3i const &upper_corner) const override;

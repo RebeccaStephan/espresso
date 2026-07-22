@@ -154,7 +154,7 @@ bool LBWalberlaImplSingleComponent<FloatType, Architecture>::
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>
-std::optional<Utils::Vector3d>
+std::optional<std::vector<Utils::Vector3d>>
 LBWalberlaImplSingleComponent<FloatType, Architecture>::
     get_node_force_to_be_applied(Utils::Vector3i const &node) const {
   auto const bc = get_block_and_cell(get_lattice(), node, true);
@@ -164,11 +164,11 @@ LBWalberlaImplSingleComponent<FloatType, Architecture>::
   auto field =
       bc->block->template getData<VectorField>(m_force_to_be_applied_id[0]);
   auto const vec = lbm::accessor::Vector::get(field, bc->cell);
-  return zero_centered_to_md(to_vector3d(vec));
+  return std::vector<Utils::Vector3d>{zero_centered_to_md(to_vector3d(vec))};
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>
-std::optional<Utils::Vector3d>
+std::optional<std::vector<Utils::Vector3d>>
 LBWalberlaImplSingleComponent<FloatType, Architecture>::
     get_node_last_applied_force(Utils::Vector3i const &node,
                                 bool consider_ghosts) const {
@@ -180,13 +180,13 @@ LBWalberlaImplSingleComponent<FloatType, Architecture>::
   auto const field =
       bc->block->template getData<VectorField>(m_last_applied_force_field_id[0]);
   auto const vec = lbm::accessor::Vector::get(field, bc->cell);
-  return zero_centered_to_md(to_vector3d(vec));
+  return std::vector<Utils::Vector3d>{zero_centered_to_md(to_vector3d(vec))};
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>
 bool LBWalberlaImplSingleComponent<FloatType, Architecture>::
     set_node_last_applied_force(Utils::Vector3i const &node,
-                                Utils::Vector3d const &force) {
+                                std::vector<Utils::Vector3d> const &force) {
   m_pending_ghost_comm.set(GhostComm::VEL);
   m_pending_ghost_comm.set(GhostComm::LAF);
   auto bc = get_block_and_cell(get_lattice(), node, false);
@@ -198,7 +198,7 @@ bool LBWalberlaImplSingleComponent<FloatType, Architecture>::
       bc->block->template getData<VectorField>(m_last_applied_force_field_id[0]);
   auto vel_field =
       bc->block->template getData<VectorField>(m_velocity_field_id);
-  auto const vec = to_vector3<FloatType>(force);
+  auto const vec = to_vector3<FloatType>(force[0]);
   lbm::accessor::Force::set(pdf_field, vel_field, force_field, vec, m_density,
                             bc->cell);
 

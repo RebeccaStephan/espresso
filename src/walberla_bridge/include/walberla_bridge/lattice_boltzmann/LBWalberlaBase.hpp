@@ -106,18 +106,22 @@ public:
   add_forces_at_pos(std::vector<Utils::Vector3d> const &positions,
                     std::vector<Utils::Vector3d> const &forces) = 0;
 
-  /** @brief Get stored force to be applied on node in the next time step. */
-  virtual std::optional<Utils::Vector3d>
+  /** @brief Get stored force to be applied on node in the next time step.
+   *  One entry per fluid component (SC -> size 1, CG -> size 2). */
+  virtual std::optional<std::vector<Utils::Vector3d>>
   get_node_force_to_be_applied(Utils::Vector3i const &node) const = 0;
 
-  /** @brief Get stored force that was applied on node in the last time step. */
-  virtual std::optional<Utils::Vector3d>
+  /** @brief Get stored force that was applied on node in the last time step.
+   *  One entry per fluid component (SC -> size 1, CG -> size 2). */
+  virtual std::optional<std::vector<Utils::Vector3d>>
   get_node_last_applied_force(Utils::Vector3i const &node,
                               bool consider_ghosts = false) const = 0;
 
-  /** @brief Set stored force that was applied on node in the last time step. */
-  virtual bool set_node_last_applied_force(Utils::Vector3i const &node,
-                                           Utils::Vector3d const &force) = 0;
+  /** @brief Set stored force that was applied on node in the last time step.
+   *  One entry per fluid component (SC -> size 1, CG -> size 2). */
+  virtual bool
+  set_node_last_applied_force(Utils::Vector3i const &node,
+                              std::vector<Utils::Vector3d> const &force) = 0;
 
   /** @brief Get stored force that was applied on slice in the last time step.
    */

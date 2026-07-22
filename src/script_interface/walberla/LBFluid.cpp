@@ -331,7 +331,9 @@ void LBFluid::load_checkpoint(std::filesystem::path const &path, int mode) {
             cpfile.read(cpnode.slip_velocity);
           }
           lb_obj.set_node_population(ind, cpnode.populations);
-          lb_obj.set_node_last_applied_force(ind, cpnode.last_applied_force);
+          lb_obj.set_node_last_applied_force(
+              ind, std::vector<Utils::Vector3d>{cpnode.last_applied_force,
+                                                Utils::Vector3d{}});
           if (cpnode.is_boundary) {
             lb_obj.set_node_velocity_at_boundary(ind, cpnode.slip_velocity);
           }
@@ -384,7 +386,7 @@ void LBFluid::save_checkpoint(std::filesystem::path const &path, int mode) {
       if (pop and laf and lbb and ((*lbb) ? vbb.has_value() : true)) {
         LBWalberlaNodeState cpnode;
         cpnode.populations = *pop;
-        cpnode.last_applied_force = *laf;
+        cpnode.last_applied_force = laf->front(); // component a (CG: a only)
         cpnode.is_boundary = *lbb;
         if (*lbb) {
           cpnode.slip_velocity = *vbb;

@@ -163,12 +163,29 @@ Variant LBFluidNode::do_call_method(std::string const &name,
   }
   if (name == "get_last_applied_force") {
     auto const result = m_lb_fluid->get_node_last_applied_force(m_index);
-    return Utils::Mpi::reduce_optional(context()->get_comm(), result) /
-           m_conv_force;
+    auto const laf = Utils::Mpi::reduce_optional(context()->get_comm(), result);
+    if (laf.size() == 1u) {
+      return laf[0] / m_conv_force; // SC -> (3,)
+    }
+    std::vector<Variant> out;
+    out.reserve(laf.size());
+    for (auto const &f : laf) {
+      out.emplace_back(f / m_conv_force);
+    }
+    return out; // CG -> (2, 3)
   }
   if (name == "set_last_applied_force") {
-    auto const f = get_value<Utils::Vector3d>(params, "value");
-    m_lb_fluid->set_node_last_applied_force(m_index, f * m_conv_force);
+    auto const &v = params.at("value");
+    std::vector<Utils::Vector3d> force;
+    if (is_type<std::vector<Variant>>(v)) {
+      force = get_value<std::vector<Utils::Vector3d>>(v); // CG -> (2, 3)
+    } else {
+      force = {get_value<Utils::Vector3d>(v)}; // SC -> (3,)
+    }
+    for (auto &f : force) {
+      f *= m_conv_force;
+    }
+    m_lb_fluid->set_node_last_applied_force(m_index, force);
     m_lb_fluid->ghost_communication();
     return {};
   }

@@ -525,6 +525,13 @@ class LBFluidNode(ScriptInterfaceHelper):
 
     @property
     def last_applied_force(self):
+        """
+        Force applied on the node in the last time step.
+
+        Single-component LB returns a ``(3,)`` array; the color-gradient
+        (two-component) LB returns a ``(2, 3)`` array, one force vector per
+        component (component a, component b).
+        """
         return self.call_method("get_last_applied_force")
 
     @last_applied_force.setter
