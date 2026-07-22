@@ -235,7 +235,9 @@ public:
         this->template add_to_storage<_VectorField>("force_b last");    
     m_force_to_be_applied_id[0] =
         this->template add_to_storage<_VectorField>("force_a next");
-    m_velocity_field_id =
+    m_force_to_be_applied_id[1] =
+        this->template add_to_storage<_VectorField>("force_b next");
+        m_velocity_field_id =
         this->template add_to_storage<_VectorField>("velocity");
     
     m_pdf_field_id[1] = this->template add_to_storage<_PdfField>("pdfs_b");
@@ -293,12 +295,16 @@ protected:
 private:
   /**
    * @brief One LB time step using the color-gradient pull scheme.
-   * Sequence: stream two-component, sync phasefield, collide two-component,
-   * reset component forces, sync PDFs.
+   * Sequence: reset/swap component forces, stream two-component, sync phasefield, collide two-component, sync PDFs.
    */
   void integrate_pull_scheme() {
     assert(m_mpi_cart_comm_observer.is_valid());
     auto const &blocks = get_lattice().get_blocks();
+    // Swap force buffers
+    // move MD-accumulated forces from force_to_be_applied into
+    // last_applied_force (consumed collide)
+    // and zero force_to_be_applied
+    integrate_reset_force_two_component(blocks);
 
     // CG stream
     integrate_stream_two_component(blocks);
@@ -307,9 +313,7 @@ private:
 
     // CG collision
     integrate_collide_two_component(blocks);
-    // Reset component force fields (consumed by collision)
-    integrate_reset_force_two_component(blocks);
-
+  
     // Sync pdfs
     m_pdf_a_communicator->communicate();
     m_pdf_b_communicator->communicate();
@@ -330,12 +334,14 @@ private:
   void integrate_reset_force_two_component(
       std::shared_ptr<BlockStorage> const &blocks) {
     for (auto &block : *blocks) {
-      auto force_a = block.template getData<VectorField>(
-          m_last_applied_force_field_id[0]);
-      auto force_b = block.template getData<VectorField>(
-          m_last_applied_force_field_id[1]);
-      lbm::accessor::Vector::initialize(force_a, Vector3<FloatType>{0});
-      lbm::accessor::Vector::initialize(force_b, Vector3<FloatType>{0});
+      for (std::size_t i : {0u, 1u}){
+        auto last_applied_force = block.template getData<VectorField>(
+          m_last_applied_force_field_id[i]);
+        auto force_to_be_applied = block.template getData<VectorField>(
+          m_force_to_be_applied_id[i]);
+        last_applied_force->swapDataPointers(force_to_be_applied);
+        lbm::accessor::Vector::initialize(force_to_be_applied, Vector3<FloatType>{0});
+      }
     }
   }
 
