@@ -361,12 +361,9 @@ void ParticleCoupling::kernel(std::vector<Particle *> const &particles) {
       ++it_positions_force_coupling;
     }
   }
+  m_lb.add_forces_at_pos(positions_force_coupling, force_coupling_forces);
   if (color_gradient_lb) {
-    m_lb.add_density_weighted_forces_at_pos(positions_force_coupling,
-                                            force_coupling_forces);
     m_lb.add_solvation_forces_at_pos(solvation_positions, solvation_delta_mus);
-  } else {
-    m_lb.add_forces_at_pos(positions_force_coupling, force_coupling_forces);
   }
 }
 

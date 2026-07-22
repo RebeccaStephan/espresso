@@ -594,10 +594,7 @@ public:
                         Utils::Vector3d const &force) override;
   void add_forces_at_pos(std::vector<Utils::Vector3d> const &pos,
                          std::vector<Utils::Vector3d> const &forces) override;
-  void add_density_weighted_forces_at_pos(
-      std::vector<Utils::Vector3d> const &pos,
-      std::vector<Utils::Vector3d> const &forces) override;
-
+  
 public:
   // ---- Boundary Handling (leaf-specific helpers) ----
 

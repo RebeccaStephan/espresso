@@ -125,22 +125,6 @@ auto LBWalberlaImplSingleComponent<
   };
 }
 
-/**
- * @brief add_density_weighted_forces_at_pos is not implemented for
- * single-component LB. Throws std::runtime_error.
- */
-template <typename FloatType, lbmpy::Arch Architecture>
-void LBWalberlaImplSingleComponent<FloatType, Architecture>::
-    add_density_weighted_forces_at_pos(
-        std::vector<Utils::Vector3d> const &pos,
-        std::vector<Utils::Vector3d> const &forces) {
-  (void)pos;
-  (void)forces;
-  throw std::runtime_error(
-      "add_density_weighted_forces_at_pos is not implemented for "
-      "single-component LB");
-}
-
 template <typename FloatType, lbmpy::Arch Architecture>
 bool LBWalberlaImplSingleComponent<FloatType, Architecture>::add_force_at_pos(
     Utils::Vector3d const &pos, Utils::Vector3d const &force) {

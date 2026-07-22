@@ -206,23 +206,14 @@ struct Solver : public System::Leaf<Solver> {
 
   /**
    * @brief Add a force densities to the fluid at the given positions.
-   * Special method used only for particle coupling.
+   * Special method used only for particle coupling. Density-weighted 
+   * for two-components.
    * @param pos            Positions in MD at which the forces are applied.
    * @param forces  Forces to apply.
    */
   void add_forces_at_pos(std::vector<Utils::Vector3d> const &pos,
                          std::vector<Utils::Vector3d> const &forces);
-  /**
-   * @brief Add forces to two component fluid at the given positions.
-   * The force is spreaded density-weighted onto the two components.
-   * Special method used only for particle coupling in two component LB.
-   * @param pos Positions in MD units at which the color gradients are
-   * calculated.
-   * @param forces Forces to apply.
-   */
-  void add_density_weighted_forces_at_pos(
-      std::vector<Utils::Vector3d> const &pos,
-      std::vector<Utils::Vector3d> const &forces);
+
   /**
    * @brief Add solvation force to both fluid components.
    * Special method used only for particle coupling in two component LB.
