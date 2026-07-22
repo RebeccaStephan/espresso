@@ -145,11 +145,9 @@ protected:
   using Base::m_boundary_communicator;
   using Base::m_density;
   using Base::m_flag_field_id;
-  using Base::m_force_to_be_applied_id;
   using Base::m_full_communicator;
   using Base::m_has_boundaries;
   using Base::m_laf_communicator;
-  using Base::m_last_applied_force_field_id;
   using Base::m_lattice;
   using Base::m_mpi_cart_comm_observer;
   using Base::m_pdf_communicator;
@@ -170,10 +168,12 @@ protected:
   FloatType m_kT;
 
   // Block data access handles (PDF / temporaries)
-  // m_pdf_field_id[0] is the single-component PDF field.
+  // m_pdf_field_id[0] is the single-component PDF field. Same for force fields.
   // The array shape is kept to satisfy LBWalberlaCommon's CRTP access pattern.
   std::array<BlockDataID, 2> m_pdf_field_id;
   std::array<BlockDataID, 2> m_pdf_tmp_field_id;
+  std::array<BlockDataID, 2> m_last_applied_force_field_id;
+  std::array<BlockDataID, 2> m_force_to_be_applied_id;
 
 #if defined(__CUDACC__) and defined(WALBERLA_BUILD_WITH_CUDA)
   std::optional<BlockDataID> m_pdf_cpu_field_id;
@@ -219,10 +219,10 @@ public:
     m_pdf_field_id[0] = this->template add_to_storage<_PdfField>("pdfs_a");
     m_pdf_tmp_field_id[0] =
         this->template add_to_storage<_PdfField>("pdfs_a_tmp");
-    m_last_applied_force_field_id =
-        this->template add_to_storage<_VectorField>("force last");
-    m_force_to_be_applied_id =
-        this->template add_to_storage<_VectorField>("force next");
+    m_last_applied_force_field_id[0] =
+        this->template add_to_storage<_VectorField>("force_a last");
+    m_force_to_be_applied_id[0] =
+        this->template add_to_storage<_VectorField>("force_a next");
     m_velocity_field_id =
         this->template add_to_storage<_VectorField>("velocity");
     m_vel_tmp_field_id =
@@ -235,7 +235,8 @@ public:
 
     // Initialize and register pdf field with zero centered density
     auto pdf_setter = typename Kernels::InitialPDFsSetter(
-        m_force_to_be_applied_id, m_pdf_field_id[0], m_velocity_field_id, 1.0);
+        m_force_to_be_applied_id[0], m_pdf_field_id[0], m_velocity_field_id,
+        1.0);
     for (auto &block : *blocks) {
       pdf_setter(&block);
     }
@@ -255,12 +256,12 @@ public:
     // Instantiate the sweep responsible for force double buffering and
     // external forces
     m_reset_force = std::make_shared<ResetForce<PdfField, VectorField>>(
-        m_last_applied_force_field_id, m_force_to_be_applied_id);
+        m_last_applied_force_field_id[0], m_force_to_be_applied_id[0]);
 
     // Instantiate velocity update sweep
     m_update_velocities_from_pdf =
         std::make_shared<typename Kernels::UpdateVelFromPDF>(
-            m_last_applied_force_field_id, m_pdf_field_id[0],
+            m_last_applied_force_field_id[0], m_pdf_field_id[0],
             m_velocity_field_id);
   }
 
@@ -535,10 +536,11 @@ public:
                           std::vector<double> const &velocity) override;
 
   // Density
-  std::optional<double>
+  std::optional<std::vector<double>>
   get_node_density(Utils::Vector3i const &node,
                    bool consider_ghosts = false) const override;
-  bool set_node_density(Utils::Vector3i const &node, double density) override;
+  bool set_node_density(Utils::Vector3i const &node,
+                        std::vector<double> const &density) override;
   std::vector<double>
   get_slice_density(Utils::Vector3i const &lower_corner,
                     Utils::Vector3i const &upper_corner) const override;
@@ -630,7 +632,7 @@ public:
     for (auto const &block : *get_lattice().get_blocks()) {
       auto pdf_field = block.template getData<PdfField>(m_pdf_field_id[0]);
       auto force_field =
-          block.template getData<VectorField>(m_last_applied_force_field_id);
+          block.template getData<VectorField>(m_last_applied_force_field_id[0]);
       mom += lbm::accessor::MomentumDensity::reduce(pdf_field, force_field,
                                                     m_density);
     }
@@ -700,7 +702,7 @@ protected:
     m_full_communicator->addPackInfo(
         std::make_shared<PackInfo<PdfField>>(m_pdf_field_id[0]));
     m_full_communicator->addPackInfo(
-        std::make_shared<PackInfo<VectorField>>(m_last_applied_force_field_id));
+        std::make_shared<PackInfo<VectorField>>(m_last_applied_force_field_id[0]));
     m_full_communicator->addPackInfo(
         std::make_shared<PackInfo<VectorField>>(m_velocity_field_id));
 
@@ -712,7 +714,7 @@ protected:
     m_vel_communicator->addPackInfo(
         std::make_shared<PackInfo<VectorField>>(m_velocity_field_id));
     m_laf_communicator->addPackInfo(
-        std::make_shared<PackInfo<VectorField>>(m_last_applied_force_field_id));
+        std::make_shared<PackInfo<VectorField>>(m_last_applied_force_field_id[0]));
 
     m_boundary_communicator =
         std::make_shared<BoundaryFullCommunicator>(blocks);
@@ -740,7 +742,7 @@ protected:
       m_pdf_streaming_communicator->addPackInfo(
           std::make_shared<PackInfoPdf>(m_pdf_field_id[0]));
       m_pdf_streaming_communicator->addPackInfo(
-          std::make_shared<PackInfoVec>(m_last_applied_force_field_id));
+          std::make_shared<PackInfoVec>(m_last_applied_force_field_id[0]));
     };
     using FieldTrait = FieldTrait<FloatType, Stencil, Architecture>;
     using PackInfoPdf = FieldTrait::PackInfoStreamingPdf;

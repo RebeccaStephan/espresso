@@ -90,7 +90,7 @@ void LBWalberlaImplSingleComponent<FloatType, Architecture>::add_forces_at_pos(
     zero_centered_to_lb_in_place(host_force);
     auto const gl = lattice.get_ghost_layers();
     auto field = block.template uncheckedFastGetData<VectorField>(
-        m_force_to_be_applied_id);
+        m_force_to_be_applied_id[0]);
     lbm::accessor::Interpolation::add_force(field, host_pos, host_force, gl);
   }
 #endif
@@ -107,7 +107,7 @@ auto LBWalberlaImplSingleComponent<
       return;
     }
     interpolate_bspline_at_pos(
-        pos, [&, conv = m_zc_to_lb, field_id = m_force_to_be_applied_id](
+        pos, [&, conv = m_zc_to_lb, field_id = m_force_to_be_applied_id[0]](
                  std::array<int, 3> const node, double weight) {
           auto block = get_block_extended(lattice, node, 0u);
           if (!block)

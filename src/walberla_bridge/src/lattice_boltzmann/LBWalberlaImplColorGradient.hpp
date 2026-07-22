@@ -155,11 +155,9 @@ protected:
   using Base::m_boundary_communicator;
   using Base::m_density;
   using Base::m_flag_field_id;
-  using Base::m_force_to_be_applied_id;
   using Base::m_full_communicator;
   using Base::m_has_boundaries;
   using Base::m_laf_communicator;
-  using Base::m_last_applied_force_field_id;
   using Base::m_lattice;
   using Base::m_mpi_cart_comm_observer;
   using Base::m_pdf_communicator;
@@ -183,11 +181,12 @@ protected:
   // Block data access handles (PDF / two-component / temporaries)
   std::array<BlockDataID, 2> m_pdf_field_id;
   std::array<BlockDataID, 2> m_pdf_tmp_field_id;
+  std::array<BlockDataID, 2> m_last_applied_force_field_id;
+  std::array<BlockDataID, 2> m_force_to_be_applied_id;
 
   // Color gradient fields
   std::array<BlockDataID, 2> m_rho_field_id;
   BlockDataID m_phasefield_id;
-  std::array<BlockDataID, 2> m_force_color_gradient_field_id;
 
 #if defined(__CUDACC__) and defined(WALBERLA_BUILD_WITH_CUDA)
   std::optional<BlockDataID> m_pdf_cpu_field_id;
@@ -230,10 +229,12 @@ public:
     m_pdf_field_id[0] = this->template add_to_storage<_PdfField>("pdfs_a");
     m_pdf_tmp_field_id[0] =
         this->template add_to_storage<_PdfField>("pdfs_a_tmp");
-    m_last_applied_force_field_id =
-        this->template add_to_storage<_VectorField>("force last");
-    m_force_to_be_applied_id =
-        this->template add_to_storage<_VectorField>("force next");
+    m_last_applied_force_field_id[0] =
+        this->template add_to_storage<_VectorField>("force_a last");
+    m_last_applied_force_field_id[1] =
+        this->template add_to_storage<_VectorField>("force_b last");    
+    m_force_to_be_applied_id[0] =
+        this->template add_to_storage<_VectorField>("force_a next");
     m_velocity_field_id =
         this->template add_to_storage<_VectorField>("velocity");
     
@@ -243,11 +244,7 @@ public:
     m_rho_field_id[0] = this->template add_to_storage<ScalarField>("rho_a");
     m_rho_field_id[1] = this->template add_to_storage<ScalarField>("rho_b");
     m_phasefield_id = this->template add_to_storage<ScalarField>("phasefield");
-    m_force_color_gradient_field_id[0] =
-        this->template add_to_storage<_VectorField>("force_a");
-    m_force_color_gradient_field_id[1] =
-        this->template add_to_storage<_VectorField>("force_b");
-
+    
 #if defined(__CUDACC__) and defined(WALBERLA_BUILD_WITH_CUDA)
     m_host_field_allocator =
         std::make_shared<gpu::HostFieldAllocator<FloatType>>();
@@ -255,7 +252,7 @@ public:
 
     // Initialize and register pdf field with zero centered density
     auto pdf_setter = typename Kernels::InitialPDFsSetter(
-        m_force_to_be_applied_id, m_pdf_field_id[0], m_velocity_field_id, 1.0);
+        m_force_to_be_applied_id[0], m_pdf_field_id[0], m_velocity_field_id, 1.0);
     for (auto &block : *blocks) {
       pdf_setter(&block);
     }
@@ -334,9 +331,9 @@ private:
       std::shared_ptr<BlockStorage> const &blocks) {
     for (auto &block : *blocks) {
       auto force_a = block.template getData<VectorField>(
-          m_force_color_gradient_field_id[0]);
+          m_last_applied_force_field_id[0]);
       auto force_b = block.template getData<VectorField>(
-          m_force_color_gradient_field_id[1]);
+          m_last_applied_force_field_id[1]);
       lbm::accessor::Vector::initialize(force_a, Vector3<FloatType>{0});
       lbm::accessor::Vector::initialize(force_b, Vector3<FloatType>{0});
     }
@@ -392,8 +389,8 @@ public:
     // Instantiate collide kernel
     m_collision_model_two_component =
         std::make_shared<CollisionModelTwoComponent>(
-            m_force_color_gradient_field_id[0],
-            m_force_color_gradient_field_id[1], m_pdf_field_id[0],
+            m_last_applied_force_field_id[0],
+            m_last_applied_force_field_id[1], m_pdf_field_id[0],
             m_pdf_field_id[1], m_phasefield_id, m_rho_field_id[0],
             m_rho_field_id[1], m_velocity_field_id,
             m_beta,                   // beta (interface thickness)
@@ -405,7 +402,7 @@ public:
 
     // Instantiate stream kernel
     m_stream_model_two_component = std::make_shared<StreamModelTwoComponent>(
-        m_force_color_gradient_field_id[0], m_force_color_gradient_field_id[1],
+        m_last_applied_force_field_id[0], m_last_applied_force_field_id[1],
         m_pdf_field_id[0], m_pdf_field_id[1], m_phasefield_id,
         m_rho_field_id[0], m_rho_field_id[1], m_velocity_field_id);
 
@@ -435,7 +432,7 @@ public:
   void init_pdfs_from_components() override {
     auto const &blocks = m_lattice->get_blocks();
     auto init_two_component = typename Kernels::InitialPDFsSetterTwoComponent(
-        m_force_color_gradient_field_id[0], m_force_color_gradient_field_id[1],
+        m_last_applied_force_field_id[0], m_last_applied_force_field_id[1],
         m_pdf_field_id[0], m_pdf_field_id[1], m_phasefield_id,
         m_rho_field_id[0], m_rho_field_id[1], m_velocity_field_id);
     for (auto &block : *blocks) {
@@ -555,10 +552,11 @@ public:
                           std::vector<double> const &velocity) override;
 
   // Density
-  std::optional<double>
+  std::optional<std::vector<double>>
   get_node_density(Utils::Vector3i const &node,
                    bool consider_ghosts = false) const override;
-  bool set_node_density(Utils::Vector3i const &node, double density) override;
+  bool set_node_density(Utils::Vector3i const &node,
+                        std::vector<double> const &density) override;
   std::vector<double>
   get_slice_density(Utils::Vector3i const &lower_corner,
                     Utils::Vector3i const &upper_corner) const override;
@@ -658,7 +656,7 @@ public:
         "get_momentum is not yet implemented for two-component LB");
   }
 
-  // Density interpolation (always throws for CG — use get_component_densities)
+  // Density interpolation (always throws for CG — use get_density instead)
   std::optional<double> get_density_at_pos(
       Utils::Vector3d const & /* pos */,
       bool /* consider_points_in_halo */ = false) const override {
@@ -686,19 +684,6 @@ public:
 
   // ---- LBWalberlaColorGradientBase per-component accessors ----
 
-  std::optional<std::array<double, 2>>
-  get_node_component_densities(Utils::Vector3i const &node,
-                               bool consider_ghosts = false) const override;
-
-  bool set_node_component_densities(Utils::Vector3i const &node,
-                                    std::array<double, 2> const &rho) override;
-
-  std::vector<double>
-  get_slice_component_densities(Utils::Vector3i const &lower,
-                                Utils::Vector3i const &upper) const override {
-    return this->get_slice_density(lower, upper);
-  }
-
   void set_component_viscosities(std::array<double, 2> const &nu) override {
     m_viscosity[0] = FloatType_c(nu[0]);
     m_viscosity[1] = FloatType_c(nu[1]);
@@ -715,7 +700,7 @@ public:
   }
 
   // ---- External force: silently accepted but has no effect in CG ----
-  // (CG forces are component-specific via m_force_color_gradient_field_id)
+  // (CG forces are component-specific via m_last_applied_force_field_id)
 
   void set_external_force(Utils::Vector3d const & /* ext_force */) override {
     // No-op: color-gradient LB does not use a global external force field.
@@ -741,11 +726,6 @@ public:
 
   [[nodiscard]] auto get_phasefield_id() const noexcept {
     return m_phasefield_id;
-  }
-
-  [[nodiscard]] auto
-  get_force_color_gradient_field_id(int component) const noexcept {
-    return m_force_color_gradient_field_id[component];
   }
 
   /**
@@ -799,7 +779,7 @@ protected:
     m_full_communicator->addPackInfo(
         std::make_shared<PackInfo<PdfField>>(m_pdf_field_id[0]));
     m_full_communicator->addPackInfo(
-        std::make_shared<PackInfo<VectorField>>(m_last_applied_force_field_id));
+        std::make_shared<PackInfo<VectorField>>(m_last_applied_force_field_id[0]));
     m_full_communicator->addPackInfo(
         std::make_shared<PackInfo<VectorField>>(m_velocity_field_id));
 
@@ -811,7 +791,7 @@ protected:
     m_vel_communicator->addPackInfo(
         std::make_shared<PackInfo<VectorField>>(m_velocity_field_id));
     m_laf_communicator->addPackInfo(
-        std::make_shared<PackInfo<VectorField>>(m_last_applied_force_field_id));
+        std::make_shared<PackInfo<VectorField>>(m_last_applied_force_field_id[0]));
 
     m_boundary_communicator =
         std::make_shared<BoundaryFullCommunicator>(blocks);
@@ -837,7 +817,7 @@ protected:
       m_pdf_streaming_communicator->addPackInfo(
           std::make_shared<PackInfoPdf>(m_pdf_field_id[0]));
       m_pdf_streaming_communicator->addPackInfo(
-          std::make_shared<PackInfoVec>(m_last_applied_force_field_id));
+          std::make_shared<PackInfoVec>(m_last_applied_force_field_id[0]));
     };
     using FieldTrait = FieldTrait<FloatType, Stencil, Architecture>;
     using PackInfoPdf = FieldTrait::PackInfoStreamingPdf;

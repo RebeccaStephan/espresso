@@ -91,7 +91,7 @@ std::vector<double> LBWalberlaImplColorGradient<FloatType, Architecture>::
         if (out.empty())
           out.resize(3u * ci.numCells());
         auto const field =
-            block.template getData<VectorField>(m_last_applied_force_field_id);
+            block.template getData<VectorField>(m_last_applied_force_field_id[0]);
         auto const values = lbm::accessor::Vector::get(field, bci);
 
         auto kernel = [&values, &out](unsigned const block_index,
@@ -122,7 +122,7 @@ void LBWalberlaImplColorGradient<FloatType, Architecture>::
         assert(force.size() == 3u * ci.numCells());
         auto pdf_field = block.template getData<PdfField>(m_pdf_field_id[0]);
         auto force_field =
-            block.template getData<VectorField>(m_last_applied_force_field_id);
+            block.template getData<VectorField>(m_last_applied_force_field_id[0]);
         auto vel_field =
             block.template getData<VectorField>(m_velocity_field_id);
         std::vector<FloatType> values(3u * bci.numCells());
@@ -194,7 +194,7 @@ void LBWalberlaImplColorGradient<FloatType, Architecture>::set_slice_population(
         auto pdf_field_a = block.template getData<PdfField>(m_pdf_field_id[0]);
         auto pdf_field_b = block.template getData<PdfField>(m_pdf_field_id[1]);
         auto force_field =
-            block.template getData<VectorField>(m_last_applied_force_field_id);
+            block.template getData<VectorField>(m_last_applied_force_field_id[0]);
         auto vel_field =
             block.template getData<VectorField>(m_velocity_field_id);
         std::vector<FloatType> values_a(this->stencil_size() * bci.numCells());

@@ -63,7 +63,7 @@ void LBWalberlaImplSingleComponent<
   m_kT = FloatType_c(kT);
   m_seed = seed;
   auto obj = typename Kernels::StreamCollisionModelThermalized(
-      m_last_applied_force_field_id, m_pdf_field_id[0],
+      m_last_applied_force_field_id[0], m_pdf_field_id[0],
       zero_centered_to_lb(m_kT), omega, omega, omega_odd, omega, seed,
       uint32_t{0u});
   m_collision_model = std::make_shared<CollisionModel>(std::move(obj));
@@ -116,7 +116,7 @@ void LBWalberlaImplSingleComponent<FloatType, Architecture>::
   auto const lebc_top_index = lebc_slab_total_thickness - lebc_slab_origin;
   m_collision_model = std::make_shared<CollisionModel>(
       typename Kernels::StreamCollisionModelLeesEdwards(
-          m_last_applied_force_field_id, m_pdf_field_id[0], lebc_bot_index,
+          m_last_applied_force_field_id[0], m_pdf_field_id[0], lebc_bot_index,
           lebc_top_index, omega, omega, omega_odd, omega, shear_vel));
   m_lees_edwards_callbacks = std::move(lees_edwards_pack);
   m_run_stream_collide_sweep =
@@ -134,7 +134,7 @@ void LBWalberlaImplSingleComponent<FloatType, Architecture>::
           m_lees_edwards_callbacks->get_shear_velocity);
   m_lees_edwards_last_applied_force_interpol_sweep =
       std::make_shared<InterpolateAndShiftAtBoundary<_VectorField, FloatType>>(
-          blocks, m_last_applied_force_field_id, m_vel_tmp_field_id,
+          blocks, m_last_applied_force_field_id[0], m_vel_tmp_field_id,
           n_ghost_layers, shear_direction, shear_plane_normal,
           m_lees_edwards_callbacks->get_pos_offset);
   setup_streaming_communicator();

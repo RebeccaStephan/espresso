@@ -206,8 +206,6 @@ protected:
 
   // Shared block data IDs (single-instance, layout-independent)
   BlockDataID m_flag_field_id;
-  BlockDataID m_last_applied_force_field_id;
-  BlockDataID m_force_to_be_applied_id;
   BlockDataID m_velocity_field_id;
   BlockDataID m_vel_tmp_field_id;
 
@@ -261,7 +259,7 @@ public:
   }
 
   [[nodiscard]] std::size_t get_force_field_id() const noexcept override {
-    return m_force_to_be_applied_id;
+    return derived().m_force_to_be_applied_id[0];
   }
 
   [[nodiscard]] double get_density() const noexcept override {
