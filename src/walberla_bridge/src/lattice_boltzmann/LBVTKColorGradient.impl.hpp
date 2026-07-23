@@ -59,13 +59,11 @@ void LBWalberlaImplColorGradient<FloatType, Architecture>::
           gpu::fieldCpyFunctor<ScalarFieldCpu, ScalarField>(
               blocks, *m_scalar_cpu_field_id, m_phasefield_id));
     }
-    }
 #endif
     vtk_obj.addCellDataWriter(
         std::make_shared<ScalarVTKWriter<FloatType, ScalarField, float>>(
             m_phasefield_id, "phasefield", FloatType{1}));
   }
-  // COPY-Pasta von density-writern...
   if (flag_observables & static_cast<int>(OutputVTK::density_a)) {
     auto const unit_conversion =
         FloatType_c(zero_centered_to_md(units.at("density")));
