@@ -106,7 +106,6 @@ protected:
   using typename Base::BoundaryModel;
   using typename Base::GhostComm;
   using typename Base::Kernels;
-  using typename Base::PDFStreamingCommunicator;
   using typename Base::RegularFullCommunicator;
   template <class Field>
   using PackInfo = typename Base::template PackInfo<Field>;
@@ -161,7 +160,6 @@ protected:
   using Base::m_lattice;
   using Base::m_mpi_cart_comm_observer;
   using Base::m_pdf_communicator;
-  using Base::m_pdf_streaming_communicator;
   using Base::m_pending_ghost_comm;
   using Base::m_seed;
   using Base::m_vel_communicator;
@@ -195,9 +193,8 @@ protected:
 #endif
 
   // Color gradient communicators (CG-specific)
-  std::shared_ptr<RegularFullCommunicator> m_pdf_a_communicator;
-  std::shared_ptr<RegularFullCommunicator> m_pdf_b_communicator;
   std::shared_ptr<RegularFullCommunicator> m_phasefield_communicator;
+  std::shared_ptr<RegularFullCommunicator> m_rho_communicator;
   // Stub members required by LBWalberlaCommon CRTP bodies.
   // The CG leaf overrides the corresponding virtual methods to throw /
   // return nullopt, so these are never actually dereferenced at runtime.
@@ -266,7 +263,6 @@ public:
     reset_boundary_handling(m_lattice->get_blocks());
 
     // Set up the communication and register fields
-    setup_streaming_communicator();
     setup_full_communicator();
 
     m_pending_ghost_comm.set();
@@ -313,10 +309,13 @@ private:
 
     // CG collision
     integrate_collide_two_component(blocks);
-  
+    // rho is recomputed locally from the PDFs every step; mark its halo
+    // stale so the next density-consuming ghost_communication() call (e.g.
+    // particle coupling) resyncs it before reading ghost cells.
+    m_pending_ghost_comm.set(GhostComm::RHO);
+
     // Sync pdfs
-    m_pdf_a_communicator->communicate();
-    m_pdf_b_communicator->communicate();
+    m_pdf_communicator->communicate();
   }
 
   void
@@ -419,15 +418,6 @@ public:
   void setup_communicators_two_component() {
     auto const &blocks = m_lattice->get_blocks();
 
-    // PDF communicators for both components (D3Q27 for full ghost layer update)
-    m_pdf_a_communicator = std::make_shared<RegularFullCommunicator>(blocks);
-    m_pdf_a_communicator->addPackInfo(
-        std::make_shared<PackInfo<PdfField>>(m_pdf_field_id[0]));
-
-    m_pdf_b_communicator = std::make_shared<RegularFullCommunicator>(blocks);
-    m_pdf_b_communicator->addPackInfo(
-        std::make_shared<PackInfo<PdfField>>(m_pdf_field_id[1]));
-
     // Phasefield communicator (D3Q27 — color gradient reads D3Q27 neighbors)
     m_phasefield_communicator =
         std::make_shared<RegularFullCommunicator>(blocks);
@@ -447,8 +437,7 @@ public:
     // Communicate phasefield + PDFs after initialization
     setup_communicators_two_component(); // if not already set up
     m_phasefield_communicator->communicate();
-    m_pdf_a_communicator->communicate();
-    m_pdf_b_communicator->communicate();
+    m_pdf_communicator->communicate();
   }
 
 public:
@@ -463,64 +452,50 @@ public:
     if (!m_pending_ghost_comm.any())
       return;
     assert(m_mpi_cart_comm_observer.is_valid());
-    ghost_communication_two_component();
-  }
-
-  /** @brief Ghost communication for two-component color gradient LB. */
-  void ghost_communication_two_component() {
-    ghost_communication_two_component_pdf();
-    ghost_communication_two_component_phasefield();
-    ghost_communication_two_component_vel();
-    ghost_communication_two_component_laf();
-  }
-
-  void ghost_communication_two_component_pdf() {
-    if (m_pending_ghost_comm.test(GhostComm::PDF)) {
-      m_pdf_a_communicator->communicate();
-      m_pdf_b_communicator->communicate();
-      m_pending_ghost_comm.reset(GhostComm::PDF);
-    }
-  }
-
-  void ghost_communication_two_component_phasefield() {
-    if (m_pending_ghost_comm.test(GhostComm::PHI)) {
-      m_phasefield_communicator->communicate();
-      m_pending_ghost_comm.reset(GhostComm::PHI);
-    }
-  }
-
-  void ghost_communication_two_component_vel() {
-    if (m_pending_ghost_comm.test(GhostComm::VEL)) {
-      m_vel_communicator->communicate();
-      m_pending_ghost_comm.reset(GhostComm::VEL);
-    }
-  }
-
-  void ghost_communication_two_component_laf() {
-    if (m_pending_ghost_comm.test(GhostComm::LAF)) {
-      m_laf_communicator->communicate();
-      m_pending_ghost_comm.reset(GhostComm::LAF);
-    }
+    ghost_communication_pdf();
+    ghost_communication_phasefield();
+    ghost_communication_vel();
+    ghost_communication_laf();
+    ghost_communication_density();
   }
 
   void ghost_communication_pdf() override {
     if (m_pending_ghost_comm.test(GhostComm::PDF)) {
       assert(m_mpi_cart_comm_observer.is_valid());
-      ghost_communication_two_component_pdf();
+      m_pdf_communicator->communicate();
+      m_pending_ghost_comm.reset(GhostComm::PDF);
+    }
+  }
+
+  void ghost_communication_phasefield() {
+    if (m_pending_ghost_comm.test(GhostComm::PHI)) {
+      assert(m_mpi_cart_comm_observer.is_valid());
+      m_phasefield_communicator->communicate();
+      m_pending_ghost_comm.reset(GhostComm::PHI);
     }
   }
 
   void ghost_communication_vel() override {
     if (m_pending_ghost_comm.test(GhostComm::VEL)) {
       assert(m_mpi_cart_comm_observer.is_valid());
-      ghost_communication_two_component_vel();
+      m_vel_communicator->communicate();
+      m_pending_ghost_comm.reset(GhostComm::VEL);
     }
   }
 
   void ghost_communication_laf() override {
     if (m_pending_ghost_comm.test(GhostComm::LAF)) {
       assert(m_mpi_cart_comm_observer.is_valid());
-      ghost_communication_two_component_laf();
+      m_laf_communicator->communicate();
+      m_pending_ghost_comm.reset(GhostComm::LAF);
+    }
+  }
+
+  void ghost_communication_density() {
+    if (m_pending_ghost_comm.test(GhostComm::RHO)) {
+      assert(m_mpi_cart_comm_observer.is_valid());
+      m_rho_communicator->communicate();
+      m_pending_ghost_comm.reset(GhostComm::RHO);
     }
   }
 
@@ -539,6 +514,8 @@ public:
     m_pending_ghost_comm.reset(GhostComm::PDF);
     m_pending_ghost_comm.reset(GhostComm::VEL);
     m_pending_ghost_comm.reset(GhostComm::LAF);
+    m_pending_ghost_comm.reset(GhostComm::PHI);
+    m_pending_ghost_comm.reset(GhostComm::RHO);
   }
 
 public:
@@ -769,8 +746,9 @@ protected:
 
   /**
    * @brief Set up D3Q27 communicators for full ghost layer updates.
-   * Creates per-field communicators (PDF, velocity, last-applied force)
-   * as well as a combined communicator and the boundary communicator.
+   * Creates per-field communicators (PDF, velocity, last-applied force,
+   * density) as well as a combined communicator packing every field (both
+   * components) and the boundary communicator.
    */
   void setup_full_communicator() {
     auto const &blocks = m_lattice->get_blocks();
@@ -779,19 +757,39 @@ protected:
     m_full_communicator->addPackInfo(
         std::make_shared<PackInfo<PdfField>>(m_pdf_field_id[0]));
     m_full_communicator->addPackInfo(
+        std::make_shared<PackInfo<PdfField>>(m_pdf_field_id[1]));
+    m_full_communicator->addPackInfo(
         std::make_shared<PackInfo<VectorField>>(m_last_applied_force_field_id[0]));
     m_full_communicator->addPackInfo(
+        std::make_shared<PackInfo<VectorField>>(m_last_applied_force_field_id[1]));
+    m_full_communicator->addPackInfo(
         std::make_shared<PackInfo<VectorField>>(m_velocity_field_id));
+    m_full_communicator->addPackInfo(
+        std::make_shared<PackInfo<ScalarField>>(m_phasefield_id));
+    m_full_communicator->addPackInfo(
+        std::make_shared<PackInfo<ScalarField>>(m_rho_field_id[0]));
+    m_full_communicator->addPackInfo(
+        std::make_shared<PackInfo<ScalarField>>(m_rho_field_id[1]));
 
     m_pdf_communicator = std::make_shared<RegularFullCommunicator>(blocks);
     m_vel_communicator = std::make_shared<RegularFullCommunicator>(blocks);
     m_laf_communicator = std::make_shared<RegularFullCommunicator>(blocks);
     m_pdf_communicator->addPackInfo(
         std::make_shared<PackInfo<PdfField>>(m_pdf_field_id[0]));
+    m_pdf_communicator->addPackInfo(
+        std::make_shared<PackInfo<PdfField>>(m_pdf_field_id[1]));
     m_vel_communicator->addPackInfo(
         std::make_shared<PackInfo<VectorField>>(m_velocity_field_id));
     m_laf_communicator->addPackInfo(
         std::make_shared<PackInfo<VectorField>>(m_last_applied_force_field_id[0]));
+    m_laf_communicator->addPackInfo(
+        std::make_shared<PackInfo<VectorField>>(m_last_applied_force_field_id[1]));
+
+    m_rho_communicator = std::make_shared<RegularFullCommunicator>(blocks);
+    m_rho_communicator->addPackInfo(
+        std::make_shared<PackInfo<ScalarField>>(m_rho_field_id[0]));
+    m_rho_communicator->addPackInfo(
+        std::make_shared<PackInfo<ScalarField>>(m_rho_field_id[1]));
 
     m_boundary_communicator =
         std::make_shared<BoundaryFullCommunicator>(blocks);
@@ -806,26 +804,27 @@ protected:
   }
 
   /**
-   * @brief Set up the communicator used during integration.
-   * For color-gradient LB, always uses the generic pack info (no LE boundary).
+   * @brief No-op: CG has no dedicated PDF streaming communicator (its
+   * unified @ref m_pdf_communicator already runs every step regardless of
+   * @ref m_has_boundaries). This stub only exists to satisfy the CRTP call
+   * from @ref LBWalberlaCommon::clear_boundaries().
+   *
+   * @todo When CG boundary support is implemented (i.e. on_boundary_add()
+   * no longer throws), this needs revisiting: SC's equivalent method
+   * switches @ref m_pdf_communicator-equivalent between an optimized
+   * streaming-only pack info and a full pack info depending on
+   * @ref m_has_boundaries, because boundary treatment needs the full PDF
+   * field rather than just the streaming-relevant subset. CG's
+   * m_pdf_communicator has no such boundary-aware variant — the throw
+   * below is a guard rail so this isn't silently wrong once boundaries
+   * become reachable.
    */
   void setup_streaming_communicator() {
-    auto const setup = [this]<typename PackInfoPdf, typename PackInfoVec>() {
-      auto const &blocks = m_lattice->get_blocks();
-      m_pdf_streaming_communicator =
-          std::make_shared<PDFStreamingCommunicator>(blocks);
-      m_pdf_streaming_communicator->addPackInfo(
-          std::make_shared<PackInfoPdf>(m_pdf_field_id[0]));
-      m_pdf_streaming_communicator->addPackInfo(
-          std::make_shared<PackInfoVec>(m_last_applied_force_field_id[0]));
-    };
-    using FieldTrait = FieldTrait<FloatType, Stencil, Architecture>;
-    using PackInfoPdf = FieldTrait::PackInfoStreamingPdf;
-    using PackInfoVec = FieldTrait::PackInfoStreamingVec;
     if (m_has_boundaries) {
-      setup.template operator()<PackInfo<PdfField>, PackInfoVec>();
-    } else {
-      setup.template operator()<PackInfoPdf, PackInfoVec>();
+      throw std::runtime_error(
+          "CG PDF ghost communication is not boundary-aware yet; "
+          "setup_streaming_communicator() must be implemented for "
+          "two-component LB before enabling boundaries");
     }
   }
 };

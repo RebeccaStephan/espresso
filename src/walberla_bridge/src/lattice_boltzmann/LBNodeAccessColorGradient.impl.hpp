@@ -75,7 +75,7 @@ template <typename FloatType, lbmpy::Arch Architecture>
 std::optional<std::vector<double>>
 LBWalberlaImplColorGradient<FloatType, Architecture>::get_node_density(
     Utils::Vector3i const &node, bool consider_ghosts) const {
-  assert(not(consider_ghosts and m_pending_ghost_comm.test(GhostComm::PDF)));
+  assert(not(consider_ghosts and m_pending_ghost_comm.test(GhostComm::RHO)));
   auto bc = get_block_and_cell(get_lattice(), node, consider_ghosts);
   if (!bc)
     return std::nullopt;
@@ -91,7 +91,7 @@ LBWalberlaImplColorGradient<FloatType, Architecture>::get_node_density(
 template <typename FloatType, lbmpy::Arch Architecture>
 bool LBWalberlaImplColorGradient<FloatType, Architecture>::set_node_density(
     Utils::Vector3i const &node, std::vector<double> const &rho) {
-  m_pending_ghost_comm.set(GhostComm::PDF);
+  m_pending_ghost_comm.set(GhostComm::RHO);
   auto bc = get_block_and_cell(get_lattice(), node, false);
   if (!bc)
     return false;

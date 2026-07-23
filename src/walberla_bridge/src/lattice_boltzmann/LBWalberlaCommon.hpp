@@ -165,6 +165,7 @@ public:
       LAF, ///< last applied forces communication
       UBB, ///< boundaries communication
       PHI, ///< phasefield communication (two_component)
+      RHO, ///< per-component density communication (two_component)
       SIZE
     };
   };

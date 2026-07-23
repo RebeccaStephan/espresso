@@ -271,7 +271,7 @@ template <typename FloatType, lbmpy::Arch Architecture>
 void LBWalberlaImplColorGradient<FloatType, Architecture>::set_slice_density(
     Utils::Vector3i const &lower_corner, Utils::Vector3i const &upper_corner,
     std::vector<double> const &density) {
-  m_pending_ghost_comm.set(GhostComm::PDF);
+  m_pending_ghost_comm.set(GhostComm::RHO);
   for_each_block_in_slice(
       get_lattice(), lower_corner, upper_corner,
       [&](auto &block, auto const &bci, auto const &ci,
