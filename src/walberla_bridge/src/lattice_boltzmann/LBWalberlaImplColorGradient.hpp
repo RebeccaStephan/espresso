@@ -547,6 +547,11 @@ public:
                          Utils::Vector3i const &upper_corner,
                          std::vector<double> const &density) override;
 
+  // Phasefield
+  std::optional<double>
+  get_node_phasefield(Utils::Vector3i const &node,
+                      bool consider_ghosts = false) const override;
+
   // Population
   std::optional<std::vector<double>>
   get_node_population(Utils::Vector3i const &node,

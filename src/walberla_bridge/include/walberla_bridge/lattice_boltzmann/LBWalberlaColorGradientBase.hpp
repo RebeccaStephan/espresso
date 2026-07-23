@@ -56,4 +56,9 @@ public:
   virtual void set_component_viscosities(std::array<double, 2> const &nu) = 0;
   [[nodiscard]] virtual std::array<double, 2>
   get_component_viscosities() const = 0;
+
+  /** @brief Order parameter phi = (rho_a - rho_b) / (rho_a + rho_b). */
+  virtual std::optional<double>
+  get_node_phasefield(Utils::Vector3i const &node,
+                      bool consider_ghosts = false) const = 0;
 };

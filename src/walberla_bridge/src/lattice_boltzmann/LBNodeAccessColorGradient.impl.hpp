@@ -101,6 +101,20 @@ bool LBWalberlaImplColorGradient<FloatType, Architecture>::set_node_density(
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>
+std::optional<double>
+LBWalberlaImplColorGradient<FloatType, Architecture>::get_node_phasefield(
+    Utils::Vector3i const &node, bool consider_ghosts) const {
+  assert(not(consider_ghosts and m_pending_ghost_comm.test(GhostComm::PHI)));
+  auto bc = get_block_and_cell(get_lattice(), node, consider_ghosts);
+  if (!bc)
+    return std::nullopt;
+
+  auto const phasefield_field =
+      bc->block->template uncheckedFastGetData<ScalarField>(m_phasefield_id);
+  return double_c(phasefield_field->get(bc->cell));
+}
+
+template <typename FloatType, lbmpy::Arch Architecture>
 std::optional<std::vector<double>>
 LBWalberlaImplColorGradient<FloatType, Architecture>::get_node_population(
     Utils::Vector3i const &node, bool consider_ghosts) const {
