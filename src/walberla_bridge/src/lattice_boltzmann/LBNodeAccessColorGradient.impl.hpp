@@ -58,13 +58,7 @@ LBWalberlaImplColorGradient<FloatType, Architecture>::get_node_velocity(
 
 template <typename FloatType, lbmpy::Arch Architecture>
 bool LBWalberlaImplColorGradient<FloatType, Architecture>::set_node_velocity(
-    Utils::Vector3i const &node, Utils::Vector3d const &v) {
-  m_pending_ghost_comm.set(GhostComm::PDF);
-  m_pending_ghost_comm.set(GhostComm::VEL);
-  auto bc = get_block_and_cell(get_lattice(), node, false);
-  if (!bc)
-    return false;
-
+    Utils::Vector3i const & /* node */, Utils::Vector3d const & /* v */) {
   throw std::runtime_error(
       "set_node_velocity is not supported for two-component LB. "
       "Set densities and populations instead to control the barycentric "
