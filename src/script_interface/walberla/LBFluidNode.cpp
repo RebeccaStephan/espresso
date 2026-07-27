@@ -131,9 +131,18 @@ Variant LBFluidNode::do_call_method(std::string const &name,
   if (name == "get_boundary_force") {
     auto const boundary_opt = m_lb_fluid->get_node_is_boundary(m_index);
     if (is_boundary_all_reduce(context()->get_comm(), boundary_opt)) {
-      auto result = m_lb_fluid->get_node_boundary_force(m_index);
-      return Utils::Mpi::reduce_optional(context()->get_comm(), result) /
-             m_conv_force;
+      auto const result = m_lb_fluid->get_node_boundary_force(m_index);
+      auto const force =
+          Utils::Mpi::reduce_optional(context()->get_comm(), result);
+      if (force.size() == 1u) {
+        return force[0] / m_conv_force; // SC -> (3,)
+      }
+      std::vector<Variant> out;
+      out.reserve(force.size());
+      for (auto const &f : force) {
+        out.emplace_back(f / m_conv_force);
+      }
+      return out; // CG -> (2, 3)
     }
     return Variant{None{}};
   }

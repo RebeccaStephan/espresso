@@ -509,6 +509,13 @@ class LBFluidNode(ScriptInterfaceHelper):
 
     @property
     def boundary_force(self):
+        """
+        Force exerted by the fluid on this boundary node.
+
+        Single-component LB returns a ``(3,)`` array; the color-gradient
+        (two-component) LB returns a ``(2, 3)`` array, one force vector per
+        component (component a, component b).
+        """
         return self.call_method("get_boundary_force")
 
     @boundary_force.setter

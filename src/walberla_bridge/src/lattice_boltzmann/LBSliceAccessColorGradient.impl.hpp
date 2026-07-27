@@ -51,8 +51,8 @@ LBWalberlaImplColorGradient<FloatType, Architecture>::get_slice_velocity(
         auto kernel = [&values, &out, this](unsigned const block_index,
                                             unsigned const local_index,
                                             Utils::Vector3i const &node) {
-          if (m_boundary->node_is_boundary(node)) {
-            auto const &vec = m_boundary->get_node_value_at_boundary(node);
+          if (m_boundary[0]->node_is_boundary(node)) {
+            auto const &vec = m_boundary[0]->get_node_value_at_boundary(node);
             for (uint_t f = 0u; f < 3u; ++f) {
               out[3u * local_index + f] = vec[f];
             }

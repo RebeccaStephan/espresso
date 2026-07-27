@@ -106,6 +106,7 @@ protected:
   using typename Base::BoundaryModel;
   using typename Base::GhostComm;
   using typename Base::Kernels;
+  using typename Base::PDFStreamingCommunicator;
   using typename Base::RegularFullCommunicator;
   template <class Field>
   using PackInfo = typename Base::template PackInfo<Field>;
@@ -160,6 +161,7 @@ protected:
   using Base::m_lattice;
   using Base::m_mpi_cart_comm_observer;
   using Base::m_pdf_communicator;
+  using Base::m_pdf_streaming_communicator;
   using Base::m_pending_ghost_comm;
   using Base::m_seed;
   using Base::m_vel_communicator;
@@ -263,6 +265,7 @@ public:
     reset_boundary_handling(m_lattice->get_blocks());
 
     // Set up the communication and register fields
+    setup_streaming_communicator();
     setup_full_communicator();
 
     m_pending_ghost_comm.set();
@@ -291,7 +294,9 @@ protected:
 private:
   /**
    * @brief One LB time step using the color-gradient pull scheme.
-   * Sequence: reset/swap component forces, stream two-component, sync phasefield, collide two-component, sync PDFs.
+   * Sequence: reset/swap component forces, stream two-component, sync
+   * phasefield, collide two-component, sync PDFs and last-applied-force,
+   * handle boundaries (both components).
    */
   void integrate_pull_scheme() {
     assert(m_mpi_cart_comm_observer.is_valid());
@@ -306,16 +311,21 @@ private:
     integrate_stream_two_component(blocks);
     // Sync phasefield
     m_phasefield_communicator->communicate();
-
     // CG collision
     integrate_collide_two_component(blocks);
-    // rho is recomputed locally from the PDFs every step; mark its halo
-    // stale so the next density-consuming ghost_communication() call (e.g.
-    // particle coupling) resyncs it before reading ghost cells.
+    // Mark pending ghost layer updates: rho and velocity are recomputed
+    // locally by collide, so their halo copies go stale; laf's halo is only
+    // partially (D3Q19) refreshed by the streaming communicator below, so it
+    // still needs a full (D3Q27) resync on the next laf-consuming read
     m_pending_ghost_comm.set(GhostComm::RHO);
+    m_pending_ghost_comm.set(GhostComm::VEL);
+    m_pending_ghost_comm.set(GhostComm::LAF);
+    m_pdf_streaming_communicator->communicate();
 
-    // Sync pdfs
-    m_pdf_communicator->communicate();
+    // Handle boundaries
+    if (m_has_boundaries) {
+      integrate_boundaries(blocks);
+    }
   }
 
   void
@@ -341,6 +351,13 @@ private:
         last_applied_force->swapDataPointers(force_to_be_applied);
         lbm::accessor::Vector::initialize(force_to_be_applied, Vector3<FloatType>{0});
       }
+    }
+  }
+
+  void integrate_boundaries(std::shared_ptr<BlockStorage> const &blocks) {
+    for (auto &block : *blocks) {
+      (*m_boundary[0])(&block);
+      (*m_boundary[1])(&block);
     }
   }
 
@@ -411,18 +428,6 @@ public:
         m_pdf_field_id[0], m_pdf_field_id[1], m_phasefield_id,
         m_rho_field_id[0], m_rho_field_id[1], m_velocity_field_id);
 
-    // Set up CG-specific communicators
-    setup_communicators_two_component();
-  }
-
-  void setup_communicators_two_component() {
-    auto const &blocks = m_lattice->get_blocks();
-
-    // Phasefield communicator (D3Q27 — color gradient reads D3Q27 neighbors)
-    m_phasefield_communicator =
-        std::make_shared<RegularFullCommunicator>(blocks);
-    m_phasefield_communicator->addPackInfo(
-        std::make_shared<PackInfo<ScalarField>>(m_phasefield_id));
   }
 
   void init_pdfs_from_components() override {
@@ -435,7 +440,6 @@ public:
       init_two_component(&block);
     }
     // Communicate phasefield + PDFs after initialization
-    setup_communicators_two_component(); // if not already set up
     m_phasefield_communicator->communicate();
     m_pdf_communicator->communicate();
   }
@@ -616,9 +620,13 @@ public:
 
   void reset_boundary_handling(std::shared_ptr<BlockStorage> const &blocks) {
     auto const [lc, uc] = m_lattice->get_local_grid_range(true);
-    m_boundary = std::make_shared<BoundaryModel>(
-        blocks, m_pdf_field_id[0], m_flag_field_id,
-        CellInterval{to_cell(lc), to_cell(uc)});
+    auto const domain = CellInterval{to_cell(lc), to_cell(uc)};
+    // one BoundaryModel per PDF field, sharing the flag field;
+    // both are kept holding the same wall velocity value per boundary cell 
+    m_boundary = {std::make_shared<BoundaryModel>(blocks, m_pdf_field_id[0],
+                                                  m_flag_field_id, domain),
+                  std::make_shared<BoundaryModel>(blocks, m_pdf_field_id[1],
+                                                  m_flag_field_id, domain)};
   }
 
   void on_boundary_add();
@@ -752,7 +760,7 @@ protected:
   /**
    * @brief Set up D3Q27 communicators for full ghost layer updates.
    * Creates per-field communicators (PDF, velocity, last-applied force,
-   * density) as well as a combined communicator packing every field (both
+   * phasefield, density) as well as a combined communicator packing every field (both
    * components) and the boundary communicator.
    */
   void setup_full_communicator() {
@@ -790,6 +798,10 @@ protected:
     m_laf_communicator->addPackInfo(
         std::make_shared<PackInfo<VectorField>>(m_last_applied_force_field_id[1]));
 
+    m_phasefield_communicator =
+        std::make_shared<RegularFullCommunicator>(blocks);
+    m_phasefield_communicator->addPackInfo(
+        std::make_shared<PackInfo<ScalarField>>(m_phasefield_id));
     m_rho_communicator = std::make_shared<RegularFullCommunicator>(blocks);
     m_rho_communicator->addPackInfo(
         std::make_shared<PackInfo<ScalarField>>(m_rho_field_id[0]));
@@ -801,35 +813,42 @@ protected:
     m_boundary_communicator->addPackInfo(
         std::make_shared<field::communication::BoundaryFlagPackInfo<FlagField>>(
             m_flag_field_id));
-    auto boundary_packinfo = std::make_shared<
-        field::communication::BoundaryPackInfo<FlagField, BoundaryModel>>(
-        m_flag_field_id);
-    boundary_packinfo->setup_boundary_handle(m_lattice, m_boundary);
-    m_boundary_communicator->addPackInfo(boundary_packinfo);
+    // one boundary pack info per component's BoundaryModel
+    for (auto &boundary : m_boundary) {
+      auto boundary_packinfo = std::make_shared<
+          field::communication::BoundaryPackInfo<FlagField, BoundaryModel>>(
+          m_flag_field_id);
+      boundary_packinfo->setup_boundary_handle(m_lattice, boundary);
+      m_boundary_communicator->addPackInfo(boundary_packinfo);
+    }
   }
 
   /**
-   * @brief No-op: CG has no dedicated PDF streaming communicator (its
-   * unified @ref m_pdf_communicator already runs every step regardless of
-   * @ref m_has_boundaries). This stub only exists to satisfy the CRTP call
-   * from @ref LBWalberlaCommon::clear_boundaries().
-   *
-   * @todo When CG boundary support is implemented (i.e. on_boundary_add()
-   * no longer throws), this needs revisiting: SC's equivalent method
-   * switches @ref m_pdf_communicator-equivalent between an optimized
-   * streaming-only pack info and a full pack info depending on
-   * @ref m_has_boundaries, because boundary treatment needs the full PDF
-   * field rather than just the streaming-relevant subset. CG's
-   * m_pdf_communicator has no such boundary-aware variant — the throw
-   * below is a guard rail so this isn't silently wrong once boundaries
-   * become reachable.
+   * @brief Set up the communicator used during integration.
+   * Uses optimized streaming pack info when no boundaries active;
+   * falls back to the generic pack info otherwise.
    */
   void setup_streaming_communicator() {
+    auto const setup = [this]<typename PackInfoPdf, typename PackInfoVec>() {
+      auto const &blocks = m_lattice->get_blocks();
+      m_pdf_streaming_communicator =
+          std::make_shared<PDFStreamingCommunicator>(blocks);
+      m_pdf_streaming_communicator->addPackInfo(
+          std::make_shared<PackInfoPdf>(m_pdf_field_id[0]));
+      m_pdf_streaming_communicator->addPackInfo(
+          std::make_shared<PackInfoPdf>(m_pdf_field_id[1]));
+      m_pdf_streaming_communicator->addPackInfo(
+          std::make_shared<PackInfoVec>(m_last_applied_force_field_id[0]));
+      m_pdf_streaming_communicator->addPackInfo(
+          std::make_shared<PackInfoVec>(m_last_applied_force_field_id[1]));
+    };
+    using FieldTrait = FieldTrait<FloatType, Stencil, Architecture>;
+    using PackInfoPdf = FieldTrait::PackInfoStreamingPdf;
+    using PackInfoVec = FieldTrait::PackInfoStreamingVec;
     if (m_has_boundaries) {
-      throw std::runtime_error(
-          "CG PDF ghost communication is not boundary-aware yet; "
-          "setup_streaming_communicator() must be implemented for "
-          "two-component LB before enabling boundaries");
+      setup.template operator()<PackInfo<PdfField>, PackInfoVec>();
+    } else {
+      setup.template operator()<PackInfoPdf, PackInfoVec>();
     }
   }
 };

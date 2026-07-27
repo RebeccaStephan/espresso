@@ -213,8 +213,9 @@ public:
       Utils::Vector3i const &lower_corner, Utils::Vector3i const &upper_corner,
       std::vector<std::optional<Utils::Vector3d>> const &velocity) = 0;
 
-  /** @brief Get (stored) force applied on node due to boundary condition. */
-  virtual std::optional<Utils::Vector3d>
+  /** @brief Get (stored) force applied on node due to boundary condition.
+   *  One entry per fluid component (SC -> size 1, CG -> size 2). */
+  virtual std::optional<std::vector<Utils::Vector3d>>
   get_node_boundary_force(Utils::Vector3i const &node) const = 0;
 
   /** @brief Remove a node from the boundaries. */

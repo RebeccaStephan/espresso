@@ -30,13 +30,17 @@
 namespace walberla {
 
 /**
- * @brief Boundary addition is not supported in the color-gradient model.
- * Always throws.
+ * @brief Lazily enable boundary mode on first boundary addition.
+ * Switches the streaming communicator to the generic pack info,
+ * which correctly handles boundary-adjacent cells.
  */
 template <typename FloatType, lbmpy::Arch Architecture>
 void LBWalberlaImplColorGradient<FloatType, Architecture>::on_boundary_add() {
-  throw std::runtime_error(
-      "boundaries are not implemented for two-component LB");
+  if (not m_has_boundaries) {
+    m_has_boundaries = true;
+    setup_streaming_communicator();
+  }
+  m_has_boundaries = true;
 }
 
 } // namespace walberla
