@@ -341,7 +341,7 @@ private:
 
   void integrate_boundaries(std::shared_ptr<BlockStorage> const &blocks) {
     for (auto &block : *blocks)
-      (*m_boundary)(&block);
+      (*m_boundary[0])(&block);
   }
 
   void integrate_update_velocities_from_pdf(
@@ -601,9 +601,9 @@ public:
 
   void reset_boundary_handling(std::shared_ptr<BlockStorage> const &blocks) {
     auto const [lc, uc] = m_lattice->get_local_grid_range(true);
-    m_boundary = std::make_shared<BoundaryModel>(
+    m_boundary = {std::make_shared<BoundaryModel>(
         blocks, m_pdf_field_id[0], m_flag_field_id,
-        CellInterval{to_cell(lc), to_cell(uc)});
+        CellInterval{to_cell(lc), to_cell(uc)})};
   }
 
   void on_boundary_add();
@@ -722,7 +722,7 @@ protected:
     auto boundary_packinfo = std::make_shared<
         field::communication::BoundaryPackInfo<FlagField, BoundaryModel>>(
         m_flag_field_id);
-    boundary_packinfo->setup_boundary_handle(m_lattice, m_boundary);
+    boundary_packinfo->setup_boundary_handle(m_lattice, m_boundary[0]);
     m_boundary_communicator->addPackInfo(boundary_packinfo);
   }
 
