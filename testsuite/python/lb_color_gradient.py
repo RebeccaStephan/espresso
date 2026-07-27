@@ -26,7 +26,6 @@ Tests:
   - Population get/set for two-component mode (node and slice)
   - Setting velocity raises RuntimeError in two-component mode
   - Pressure tensor raises RuntimeError in two-component mode
-  - Adding boundaries raises RuntimeError in two-component mode
   - Velocity getter returns sensible values after integration
   - init_two_component produces PDFs consistent with set densities
   - Viscosity setter works on live CG fluid
