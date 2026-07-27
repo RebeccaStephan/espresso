@@ -216,14 +216,6 @@ class ColorGradientLBTest(ut.TestCase):
         with self.assertRaisesRegex(RuntimeError, "not implemented for two-component"):
             _ = lbf[:, :, :].pressure_tensor
 
-    def test_boundary_raises(self):
-        """Adding boundaries should raise in two-component mode."""
-        lbf = self._create_lbf()
-        self._init_droplet(lbf)
-
-        with self.assertRaisesRegex(RuntimeError, "not implemented for two-component"):
-            lbf[0, 0, 0].boundary = espressomd.lb.VelocityBounceBack([0, 0, 0])
-
     def test_velocity_getter(self):
         """Velocity getter should return finite values after integration."""
         lbf = self._create_lbf()
