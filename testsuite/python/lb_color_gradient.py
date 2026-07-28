@@ -34,6 +34,8 @@ Tests:
   - Single viscosity does not create two-component mode
   - Running integration steps without crash
   - Mass conservation (total rho_a and rho_b are conserved)
+  - ext_force_density is split between components density-weighted, and
+    grows total system momentum at the expected rate
 """
 
 import unittest as ut
@@ -303,6 +305,56 @@ class ColorGradientLBTest(ut.TestCase):
         # Single-component: density should be a scalar
         dens = lbf[0, 0, 0].density
         self.assertIsInstance(dens, float)
+
+    def test_external_force_density_weighted_split(self):
+        """
+        ext_force_density must be split between components in proportion to
+        local rho_a/rho_b at each node (same rule as add_forces_at_pos), and
+        the incremental momentum gained per step -- once the same constant
+        force has been active for two consecutive steps, so the force's
+        half-step velocity correction is identical on both and cancels in
+        the difference -- must equal ext_force_density * volume.
+        """
+        ext_force_density = np.array([0.0, 0.0021, 0.0])
+        lbf = espressomd.lb.LBFluid(
+            agrid=AGRID, density=RHO_0, tau=self.system.time_step,
+            kinematic_viscosity=[VISCOSITY, VISCOSITY],
+            ext_force_density=ext_force_density)
+        self.system.lb = lbf
+        self._init_droplet(lbf)
+
+        np.testing.assert_allclose(
+            np.copy(lbf.ext_force_density), ext_force_density)
+
+        # Find a genuinely mixed (interface) node to check the split rule.
+        densities = np.copy(lbf[:, :, :].density)
+        frac_a = densities[..., 0] / (densities[..., 0] + densities[..., 1])
+        x, y, z = (int(v) for v in np.unravel_index(
+            np.argmin(np.abs(frac_a - 0.5)), frac_a.shape))
+        self.assertAlmostEqual(frac_a[x, y, z], 0.5, delta=0.1)
+
+        self.system.integrator.run(1)
+        laf = np.copy(lbf[x, y, z].last_applied_force)
+        self.assertEqual(laf.shape, (2, 3))
+        np.testing.assert_allclose(
+            laf[0] + laf[1], ext_force_density, atol=1e-9)
+        self.assertAlmostEqual(
+            laf[0][1] / (laf[0][1] + laf[1][1]), frac_a[x, y, z], places=4)
+
+        # Incremental momentum growth once in steady state.
+        def total_momentum():
+            dens = np.copy(lbf[:, :, :].density)
+            rho_total = dens[..., 0] + dens[..., 1]
+            velocity = np.copy(lbf[:, :, :].velocity)
+            return np.sum(rho_total[..., np.newaxis] * velocity,
+                          axis=(0, 1, 2)) * AGRID**3
+
+        mom_1 = total_momentum()
+        self.system.integrator.run(1)
+        mom_2 = total_momentum()
+        expected_delta = ext_force_density * self.system.volume()
+        np.testing.assert_allclose(
+            mom_2 - mom_1, expected_delta, rtol=1e-6, atol=1e-9)
 
     def test_run_steps(self):
         """Two-component LB with droplet should run without crash."""

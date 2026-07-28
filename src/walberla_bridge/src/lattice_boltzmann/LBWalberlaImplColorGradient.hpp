@@ -177,6 +177,11 @@ protected:
   FloatType m_sigma{}; /// interface tension coefficient (two-component)
   FloatType m_beta{};  /// interface thickness parameter (two-component)
   FloatType m_kT;
+  /// Global external force density, split between components density-weighted
+  /// (same rule as add_forces_at_pos) each step in
+  /// integrate_reset_force_two_component(). Separate from m_reset_force,
+  /// which is kept only as an unused stub for CRTP base-class compilation.
+  Vector3<FloatType> m_ext_force{FloatType{0}, FloatType{0}, FloatType{0}};
 
   // Block data access handles (PDF / two-component / temporaries)
   std::array<BlockDataID, 2> m_pdf_field_id;
@@ -343,13 +348,75 @@ private:
   void integrate_reset_force_two_component(
       std::shared_ptr<BlockStorage> const &blocks) {
     for (auto &block : *blocks) {
-      for (std::size_t i : {0u, 1u}){
-        auto last_applied_force = block.template getData<VectorField>(
+      std::array<VectorField *, 2> last_applied_force{};
+      std::array<VectorField *, 2> force_to_be_applied{};
+      for (std::size_t i : {0u, 1u}) {
+        last_applied_force[i] = block.template getData<VectorField>(
           m_last_applied_force_field_id[i]);
-        auto force_to_be_applied = block.template getData<VectorField>(
+        force_to_be_applied[i] = block.template getData<VectorField>(
           m_force_to_be_applied_id[i]);
-        last_applied_force->swapDataPointers(force_to_be_applied);
-        lbm::accessor::Vector::initialize(force_to_be_applied, Vector3<FloatType>{0});
+        last_applied_force[i]->swapDataPointers(force_to_be_applied[i]);
+      }
+      reset_force_and_apply_external_force(&block, last_applied_force,
+                                           force_to_be_applied);
+    }
+  }
+
+  /**
+   * @brief Zero both components' force_to_be_applied (including ghost
+   * layers, since particle coupling can write there) and, if a global
+   * external force is set, add it into both components' last_applied_force,
+   * density-weighted at each cell (same split rule as
+   * add_forces_at_pos/make_density_weighted_force_interpolation_kernel, but
+   * as an exact per-cell assignment rather than a B-spline point-source
+   * spread, since this force fills the whole domain rather than
+   * originating from a particle position). Both jobs share one pass over
+   * the block instead of three separate full-domain passes; when no
+   * external force is set, only the zero loop runs, so the added feature
+   * costs nothing on the (default) unused path.
+   */
+  void reset_force_and_apply_external_force(
+      IBlock *block, std::array<VectorField *, 2> const &last_applied_force,
+      std::array<VectorField *, 2> const &force_to_be_applied) {
+    auto const ci = force_to_be_applied[0]->xyzSizeWithGhostLayer();
+    if (m_ext_force == Vector3<FloatType>{0}) {
+      for (auto x = ci.xMin(); x <= ci.xMax(); ++x) {
+        for (auto y = ci.yMin(); y <= ci.yMax(); ++y) {
+          for (auto z = ci.zMin(); z <= ci.zMax(); ++z) {
+            Cell const cell(x, y, z);
+            lbm::accessor::Vector::set(force_to_be_applied[0],
+                                       Vector3<FloatType>{0}, cell);
+            lbm::accessor::Vector::set(force_to_be_applied[1],
+                                       Vector3<FloatType>{0}, cell);
+          }
+        }
+      }
+      return;
+    }
+    auto const rho_a_field =
+        block->template getData<ScalarField>(m_rho_field_id[0]);
+    auto const rho_b_field =
+        block->template getData<ScalarField>(m_rho_field_id[1]);
+    for (auto x = ci.xMin(); x <= ci.xMax(); ++x) {
+      for (auto y = ci.yMin(); y <= ci.yMax(); ++y) {
+        for (auto z = ci.zMin(); z <= ci.zMax(); ++z) {
+          Cell const cell(x, y, z);
+          lbm::accessor::Vector::set(force_to_be_applied[0],
+                                     Vector3<FloatType>{0}, cell);
+          lbm::accessor::Vector::set(force_to_be_applied[1],
+                                     Vector3<FloatType>{0}, cell);
+          auto const rho_a = rho_a_field->get(cell);
+          auto const rho_b = rho_b_field->get(cell);
+          auto const total_rho = rho_a + rho_b;
+          if (total_rho <= FloatType{0}) {
+            continue;
+          }
+          auto const inv_rho = FloatType{1} / total_rho;
+          lbm::accessor::Vector::add(last_applied_force[0],
+                                     rho_a * inv_rho * m_ext_force, cell);
+          lbm::accessor::Vector::add(last_applied_force[1],
+                                     rho_b * inv_rho * m_ext_force, cell);
+        }
       }
     }
   }
@@ -689,15 +756,23 @@ public:
     return static_cast<double>(m_kT);
   }
 
-  // ---- External force: silently accepted but has no effect in CG ----
-  // (CG forces are component-specific via m_last_applied_force_field_id)
+  // ---- External force: split density-weighted between components in
+  // integrate_reset_force_two_component()/apply_external_force(). Not
+  // zero-centered: unlike SC's density-offset scheme, CG force fields store
+  // raw values (see add_forces_at_pos/get_slice_last_applied_force).
 
-  void set_external_force(Utils::Vector3d const & /* ext_force */) override {
-    // No-op: color-gradient LB does not use a global external force field.
+  void set_external_force(Utils::Vector3d const &ext_force) override {
+    if constexpr (Architecture == lbmpy::Arch::GPU) {
+      if (ext_force != Utils::Vector3d{}) {
+        throw std::runtime_error(
+            "External force not implemented on GPU for color-gradient LB");
+      }
+    }
+    m_ext_force = to_vector3<FloatType>(ext_force);
   }
 
   [[nodiscard]] Utils::Vector3d get_external_force() const noexcept override {
-    return {};
+    return to_vector3d(m_ext_force);
   }
 
   // ---- RNG state: CG is unthermalized ----
