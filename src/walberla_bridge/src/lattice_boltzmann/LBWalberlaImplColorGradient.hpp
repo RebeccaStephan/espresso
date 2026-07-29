@@ -433,14 +433,6 @@ private:
 
   /** @brief Relaxation rate omega from kinematic viscosity: 2/(6*nu+1). */
   FloatType shear_mode_relaxation_rate(std::size_t component = 0u) const;
-  /**
-   * @brief Odd-mode relaxation rate for the magic parameter relation.
-   * Ensures optimal bounce-back wall location for the two-relaxation-time
-   * model. Default magic number is 3/16.
-   */
-  FloatType odd_mode_relaxation_rate(
-      FloatType shear_relaxation,
-      FloatType magic_number = FloatType{3} / FloatType{16}) const;
 
 public:
   // ---- SC-only collision models: always throw ----
@@ -469,11 +461,15 @@ public:
     m_sigma = FloatType_c(sigma);
     m_beta = FloatType_c(beta);
 
-    // Compute relaxation rates from viscosities: omega = 2/(6*nu + 1)
+    // Baseline (bulk) relaxation rates from viscosities: omega = 2/(6*nu+1).
+    // The actual per-node relaxation rate used in collision is a phase-field
+    // interpolation of these two baseline values, computed inside the
+    // generated kernel itself from omega_shear_a/omega_shear_b and the local
+    // phasefield (see get_interpolated_relaxation_rate in
+    // maintainer/walberla_kernels/color_gradient.py) -- not a fixed rate per
+    // component.
     auto const omega_a = shear_mode_relaxation_rate(0u);
-    auto const omega_odd_a = odd_mode_relaxation_rate(omega_a);
     auto const omega_b = shear_mode_relaxation_rate(1u);
-    auto const omega_odd_b = odd_mode_relaxation_rate(omega_b);
 
     // Instantiate collide kernel
     m_collision_model_two_component =
@@ -482,11 +478,9 @@ public:
             m_last_applied_force_field_id[1], m_pdf_field_id[0],
             m_pdf_field_id[1], m_phasefield_id, m_rho_field_id[0],
             m_rho_field_id[1], m_velocity_field_id,
-            m_beta,                   // beta (interface thickness)
-            omega_a, omega_b,         // omega_even
-            omega_odd_a, omega_odd_b, // omega_odd
-            omega_a, omega_b,         // omega_shear
-            m_sigma                   // sigma (interface tension)
+            m_beta,           // beta (interface thickness)
+            omega_a, omega_b, // omega_shear (per-component baseline)
+            m_sigma           // sigma (interface tension)
         );
 
     // Instantiate stream kernel

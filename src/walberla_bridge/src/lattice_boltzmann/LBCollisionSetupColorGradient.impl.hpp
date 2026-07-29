@@ -39,13 +39,4 @@ FloatType LBWalberlaImplColorGradient<FloatType, Architecture>::
   return FloatType{2} / (FloatType{6} * m_viscosity[component] + FloatType{1});
 }
 
-template <typename FloatType, lbmpy::Arch Architecture>
-FloatType
-LBWalberlaImplColorGradient<FloatType, Architecture>::odd_mode_relaxation_rate(
-    FloatType shear_relaxation, FloatType magic_number) const {
-  return (FloatType{4} - FloatType{2} * shear_relaxation) /
-         (FloatType{4} * magic_number * shear_relaxation + FloatType{2} -
-          shear_relaxation);
-}
-
 } // namespace walberla

@@ -24,6 +24,7 @@ import lbmpy
 import lbmpy.creationfunctions
 import lbmpy.macroscopic_value_kernels
 import lbmpy.forcemodels
+import lbmpy.relaxationrates
 import lbmpy.stencils
 
 import relaxation_rates
@@ -119,7 +120,18 @@ def generate_fields(stencil, data_type, field_layout='fzyx'):
     return fields
 
 def create_methods(stencil, fields):
-    return color_gradient_lb_method(stencil, "_a", fields["force_a"]), color_gradient_lb_method(stencil, "_b", fields["force_b"])
+    # Both components collide with the same locally phase-interpolated relaxation rate
+    omega_shear_a_sym = sp.Symbol("omega_shear_a")
+    omega_shear_b_sym = sp.Symbol("omega_shear_b")
+    omega_eff = get_interpolated_relaxation_rate(
+        fields["phasefield"].center, omega_shear_a_sym, omega_shear_b_sym)
+    omega_odd_eff = lbmpy.relaxationrates.relaxation_rate_from_magic_number(
+        hydrodynamic_relaxation_rate=omega_eff)
+
+    return (
+        color_gradient_lb_method(stencil, fields["force_a"], omega_eff, omega_odd_eff),
+        color_gradient_lb_method(stencil, fields["force_b"], omega_eff, omega_odd_eff),
+    )
     
 def create_configs(fields, methods):
     stencil = methods[0].stencil
@@ -155,12 +167,6 @@ def create_opts(fields):
         field_layout=fields["pdfs_b"].layout
         )
     return opt_a, opt_b
-
-def append_suffix_to_rr_dict(rr_dict, suffix): 
-    return {
-        moment: sp.Symbol(f"{rr.name}{suffix}") if isinstance(rr, sp.Symbol) else rr
-        for moment, rr in rr_dict.items()
-    }
 
 def append_to_all_non_field_symbols(
     collection: ps.AssignmentCollection, appendix: str
@@ -225,7 +231,29 @@ def get_color_gradient(fields):
     )
     return gradient
 
-def color_gradient_lb_method(stencil, suffix: str, force_field: ps.Field):
+def get_interpolated_relaxation_rate(phasefield, omega_a, omega_b, delta=0.5):
+    """
+    Viscosity interpolation model taken from resi07a for the color-gradient model.
+    The bulk value 'omega_a' is imposed for phi > 'delta' and 'omega_b' for phi < '-delta'.
+    It is interpolating the harmonic mean for phi=0 piecewise with second-order polynomials towards bulk values at +/- delta.
+    The constraints for the polynomaials are the bulk values at +/- delta, vanishing derivative at that point and the harmonic mean value
+    at phi=0.
+    """
+
+    xi = 2 * omega_a * omega_b / (omega_a + omega_b)
+    eta = 2 / delta * (omega_a - xi)
+    kappa = -eta / (2 * delta)
+    lam = 2 / delta * (xi - omega_b)
+    nu = lam / (2 * delta)
+
+    return sp.Piecewise(
+        (omega_a, phasefield > delta),
+        (omega_b, phasefield < -delta),
+        (xi + eta * phasefield + kappa * phasefield**2, sp.And(phasefield > 0, phasefield <= delta)),
+        (xi + lam * phasefield + nu * phasefield**2, True),
+    )  # sp.And(phi >= -delta, phi < 0)
+
+def color_gradient_lb_method(stencil, force_field: ps.Field, omega_eff, omega_odd_eff):
 
         def s(*args):
             for r in ps.sympyextensions.multidimensional_sum(*args, dim=len(stencil[0])):
@@ -268,14 +296,22 @@ def color_gradient_lb_method(stencil, suffix: str, force_field: ps.Field):
             deviation_only=False,
         )
 
-        # Build rr_dict with relaxation from espresso's rr_getter function
-        # Then add suffix for component-specific relaxation rates
+        # Build rr_dict from espresso's rr_getter function, but route every
+        # non-conserved moment onto the phase-interpolated relaxation rates
+        # (omega_eff, omega_odd_eff) shared between both components -- see
+        # get_interpolated_relaxation_rate. omega_bulk never actually
+        # appears for the D3Q19 default moment set, but is routed to
+        # omega_eff for safety in case that ever changes.
         moments = lbmpy.moments.get_default_moment_set_for_stencil(stencil)
         rr_dict = {}
         for m in moments:
-            rr = relaxation_rates.rr_getter((m,))
-            rr_dict[m] = rr[0]
-        rr_dict = append_suffix_to_rr_dict(rr_dict, suffix)
+            rr = relaxation_rates.rr_getter((m,))[0]
+            if rr == 0:
+                rr_dict[m] = 0
+            elif rr.name == "omega_odd":
+                rr_dict[m] = omega_odd_eff
+            else:
+                rr_dict[m] = omega_eff
 
         cqc = lbmpy.methods.DensityVelocityComputation(
             stencil=stencil, compressible=True, zero_centered=False, force_model=force_model
@@ -335,32 +371,6 @@ def single_perturbation_operator(fields, method, config, opt, minimum_color_grad
         pre_collision_pdfs=False,
     )
 
-    def get_interpolated_relaxation_rate(omega_a, omega_b):
-        """
-        Viscosity interpolation model taken from resi07a for the color-gradient model.
-        The bulk values 'omega_r' is imposed for phi > 'delta' and 'omega_b' for phi < '-delta'.
-        It is interpolating the harmonic mean for phi=0 piecewise with second-order polynomials towards bulk values at +/- delta.
-        The constraints for the polynomaials are the bulk values at +/- delta, vanishing derivative at that point and the harmonic mean value
-        at phi=0.
-        """
-
-        delta=0.5 #relaxation interpolation width: value for the phasefield to exceed in order to count as bulk fluid
-
-        phasefield = fields["phasefield"].center
-
-        xi = 2 * omega_a * omega_b / (omega_a + omega_b)
-        eta = 2 / delta * (omega_a - xi)
-        kappa = -eta / (2 * delta)
-        lam = 2 / delta * (xi - omega_b)
-        nu = lam / (2 * delta)
-
-        return sp.Piecewise(
-            (omega_a, phasefield > delta),
-            (omega_b, phasefield < -delta),
-            (xi + eta * phasefield + kappa * phasefield**2, sp.And(phasefield > 0, phasefield <= delta)),
-            (xi + lam * phasefield + nu * phasefield**2, True),
-        )  # sp.And(phi >= -delta, phi < 0)
-
     def get_b_value():
         """Implementation of eq. 17 in leclaire11a/leclaire17b."""
         values = {
@@ -370,7 +380,8 @@ def single_perturbation_operator(fields, method, config, opt, minimum_color_grad
         }
         return tuple(map(lambda x: values[sp.Matrix(x).norm()], stencil.stencil_entries))
 
-    omega_effective = get_interpolated_relaxation_rate(sp.Symbol("omega_shear_a"), sp.Symbol("omega_shear_b"))
+    omega_effective = get_interpolated_relaxation_rate(
+        fields["phasefield"].center, sp.Symbol("omega_shear_a"), sp.Symbol("omega_shear_b"))
 
     A = sp.Rational(9, 4) * omega_effective * sp.Symbol("sigma")
     b = get_b_value()
