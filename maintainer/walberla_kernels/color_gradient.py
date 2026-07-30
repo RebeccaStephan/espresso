@@ -19,6 +19,7 @@
 
 import sympy as sp
 import pystencils as ps
+from pystencils.sympyextensions import common_denominator
 
 import lbmpy
 import lbmpy.creationfunctions
@@ -26,6 +27,7 @@ import lbmpy.macroscopic_value_kernels
 import lbmpy.forcemodels
 import lbmpy.relaxationrates
 import lbmpy.stencils
+import lbmpy.moments
 
 import relaxation_rates
 
@@ -253,6 +255,20 @@ def get_interpolated_relaxation_rate(phasefield, omega_a, omega_b, delta=0.5):
         (xi + lam * phasefield + nu * phasefield**2, True),
     )  # sp.And(phi >= -delta, phi < 0)
 
+def get_weighted_orthogonal_moments(stencil, weights):
+    """Reproduce the Gram-Schmidt orthogonalization that
+    lbmpy.methods.creationfunctions.create_mrt_orthogonal
+    applies to the raw default moment set
+    """
+    x, y, z = lbmpy.moments.MOMENT_SYMBOLS
+    moments = lbmpy.moments.get_default_moment_set_for_stencil(stencil)
+    diagonal_viscous_moments = [x**2 + y**2 + z**2, x**2, y**2 - z**2]
+    for i, d in enumerate(lbmpy.moments.MOMENT_SYMBOLS[:stencil.D]):
+        if d**2 in moments:
+            moments[moments.index(d**2)] = diagonal_viscous_moments[i]
+    orthogonal_moments = lbmpy.moments.gram_schmidt(moments, stencil, weights)
+    return [e * common_denominator(e) for e in orthogonal_moments]
+
 def color_gradient_lb_method(stencil, force_field: ps.Field, omega_eff, omega_odd_eff):
 
         def s(*args):
@@ -296,13 +312,12 @@ def color_gradient_lb_method(stencil, force_field: ps.Field, omega_eff, omega_od
             deviation_only=False,
         )
 
+        # Use weighted-orthogonal moments -- required by lbmpy's fluctuating LB
+        moments = get_weighted_orthogonal_moments(stencil, weights)
+
         # Build rr_dict from espresso's rr_getter function, but route every
-        # non-conserved moment onto the phase-interpolated relaxation rates
-        # (omega_eff, omega_odd_eff) shared between both components -- see
-        # get_interpolated_relaxation_rate. omega_bulk never actually
-        # appears for the D3Q19 default moment set, but is routed to
-        # omega_eff for safety in case that ever changes.
-        moments = lbmpy.moments.get_default_moment_set_for_stencil(stencil)
+        # non-conserved moment onto the effective relaxation rates
+        # (omega_eff, omega_odd_eff) shared between both components 
         rr_dict = {}
         for m in moments:
             rr = relaxation_rates.rr_getter((m,))[0]
