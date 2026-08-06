@@ -338,9 +338,6 @@ private:
   integrate_collide_two_component(std::shared_ptr<BlockStorage> const &blocks) {
     auto &cm = *m_collision_model_two_component;
     for (auto &block : *blocks) {
-      // sets block_offset_* from the block's global cell offset, so the Philox
-      // counter addresses global lattice sites and the noise is independent of
-      // the domain decomposition
       cm.configure(blocks, &block);
       cm(&block);
     }
