@@ -69,6 +69,7 @@
 
 #include <array>
 #include <bitset>
+#include <cassert>
 #include <cstddef>
 #include <functional>
 #include <initializer_list>
@@ -335,8 +336,15 @@ private:
 
   void
   integrate_collide_two_component(std::shared_ptr<BlockStorage> const &blocks) {
-    for (auto &block : *blocks)
-      (*m_collision_model_two_component)(&block);
+    auto &cm = *m_collision_model_two_component;
+    for (auto &block : *blocks) {
+      // sets block_offset_* from the block's global cell offset, so the Philox
+      // counter addresses global lattice sites and the noise is independent of
+      // the domain decomposition
+      cm.configure(blocks, &block);
+      cm(&block);
+    }
+    cm.setTime_step(cm.getTime_step() + 1u);
   }
 
   void
@@ -435,15 +443,18 @@ private:
   FloatType shear_mode_relaxation_rate(std::size_t component = 0u) const;
 
 public:
-  // ---- SC-only collision models: always throw ----
+  // ---- Collision model setup inherited from the single-component API ----
 
-  void set_collision_model(double kT, unsigned int /* seed */) override {
-    if (kT != 0.) {
-      throw std::runtime_error(
-          "thermalized collision is not supported on the color-gradient LB "
-          "model");
-    }
-    // kT == 0: no-op, CG is inherently unthermalized
+  /**
+   * @brief Store the thermalization parameters.
+   * Unlike the single-component model, this does not build a collision
+   * kernel: the CG kernel is created by
+   * @ref set_collision_model_color_gradient, which reads @c m_kT and
+   * @c m_seed and must therefore be called afterwards.
+   */
+  void set_collision_model(double kT, unsigned int seed) override {
+    m_kT = FloatType_c(kT);
+    m_seed = seed;
   }
   void set_collision_model(
       std::unique_ptr<LeesEdwardsPack> && /* lees_edwards_pack */) override {
@@ -479,8 +490,14 @@ public:
             m_pdf_field_id[1], m_phasefield_id, m_rho_field_id[0],
             m_rho_field_id[1], m_velocity_field_id,
             m_beta,           // beta (interface thickness)
+            m_kT,             // temperature; kT == 0 skips the RNG at runtime
             omega_a, omega_b, // omega_shear (per-component baseline)
-            m_sigma           // sigma (interface tension)
+            m_seed,           // RNG seed, shared by both components (they are
+                              // separated by disjoint Philox mode-index keys,
+                              // see maintainer/walberla_kernels/color_gradient.py)
+            m_sigma,          // sigma (interface tension)
+            uint32_t{0u}      // time_step: RNG counter, advanced each step in
+                              // integrate_collide_two_component()
         );
 
     // Instantiate stream kernel
@@ -769,14 +786,24 @@ public:
     return to_vector3d(m_ext_force);
   }
 
-  // ---- RNG state: CG is unthermalized ----
+  // ---- RNG state ----
 
   [[nodiscard]] std::optional<uint64_t> get_rng_state() const override {
-    return std::nullopt;
+    if (not m_collision_model_two_component or m_kT == FloatType{0}) {
+      return std::nullopt;
+    }
+    return {static_cast<uint64_t>(
+        m_collision_model_two_component->getTime_step())};
   }
 
-  void set_rng_state(uint64_t /* counter */) override {
-    throw std::runtime_error("This LB instance is unthermalized");
+  void set_rng_state(uint64_t counter) override {
+    if (not m_collision_model_two_component or m_kT == FloatType{0}) {
+      throw std::runtime_error("This LB instance is unthermalized");
+    }
+    assert(counter <=
+           static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()));
+    m_collision_model_two_component->setTime_step(
+        static_cast<uint32_t>(counter));
   }
 
   [[nodiscard]] auto get_rho_field_id(int component) const noexcept {

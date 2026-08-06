@@ -244,13 +244,12 @@ void LBFluid::do_construct(VariantMap const &params) {
     }
     make_instance(params);
     m_mpi_cart_comm_observer = ::walberla::get_mpi_cart_comm_observer();
+    m_instance->set_collision_model(lb_kT, seed);
     if (m_color_gradient) {
       auto const sigma =
           get_value_or<double>(params, "sigma", 0.) * m_conv_energy;
       auto const beta = get_value_or<double>(params, "beta", 0.7);
       m_color_gradient->set_collision_model_color_gradient(sigma, beta);
-    } else {
-      m_instance->set_collision_model(lb_kT, seed);
     }
     m_instance->set_external_force(lb_ext_f);
     m_instance->ghost_communication();

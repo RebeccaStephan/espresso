@@ -29,7 +29,10 @@ import lbmpy.relaxationrates
 import lbmpy.stencils
 import lbmpy.moments
 
+import numpy as np
+
 import relaxation_rates
+import pystencils_espresso
 
 def generate_fields(stencil, data_type, field_layout='fzyx'):
     q = len(stencil)
@@ -170,22 +173,69 @@ def create_opts(fields):
         )
     return opt_a, opt_b
 
+def create_fluctuations(double_accuracy):
+    """Noise parameters for the two per-color collision rules.
+
+    Both components share a single ``seed``, one ``kT`` and the same Philox
+    counter (time step and global lattice site). Their noise is kept
+    independent by giving component b a disjoint range of Philox mode-index
+    keys.
+    """
+    common = {
+        "temperature": sp.symbols("kT"),
+        "block_offsets": tuple(
+            ps.TypedSymbol(f"block_offset_{i}", np.uint32) for i in range(3)),
+        "seed": ps.TypedSymbol("seed", np.uint32),
+    }
+    fluctuating_a = {
+        **common,
+        "rng_node": pystencils_espresso.precision_rng[double_accuracy],
+    }
+    fluctuating_b = {
+        **common,
+        "rng_node": pystencils_espresso.precision_rng_shifted[double_accuracy],
+    }
+    return fluctuating_a, fluctuating_b
+
+def get_rng_nodes(collection: ps.AssignmentCollection) -> list:
+    return [s for s in collection.subexpressions
+            if not isinstance(s, ps.Assignment)]
+
+def sympy_cse_with_rng_nodes(ac: ps.AssignmentCollection) -> ps.AssignmentCollection:
+    """ps.simp.sympy_cse() that tolerates RNG nodes in the subexpressions.
+    """
+    nodes = get_rng_nodes(ac)
+    if not nodes:
+        return ps.simp.sympy_cse(ac)
+    stripped = ac.copy(
+        ac.main_assignments,
+        [s for s in ac.subexpressions if isinstance(s, ps.Assignment)],
+    )
+    simplified = ps.simp.sympy_cse(stripped)
+    return simplified.copy(
+        simplified.main_assignments, nodes + simplified.subexpressions)
+
 def append_to_all_non_field_symbols(
     collection: ps.AssignmentCollection, appendix: str
     ) -> ps.AssignmentCollection:
+
+    protected = {sym for node in get_rng_nodes(collection)
+                 for sym in node.symbols_defined}
 
     substitutions = dict(
         [
             (val, sp.Symbol(f"{val.name}_{appendix}"))
             for val in collection.bound_symbols
-            if not isinstance(val, ps.Field.Access) and not val.name.startswith("xi_")
+            if not isinstance(val, ps.Field.Access) and val not in protected
+            and not val.name.startswith("xi_")
         ]
     )
     xi_substitutions = dict(
         [
             (val, sp.Symbol(f"xi{appendix}_{val.name[len('xi_'):]}"))
             for val in collection.bound_symbols
-            if not isinstance(val, ps.Field.Access) and val.name.startswith("xi_")
+            if not isinstance(val, ps.Field.Access) and val not in protected
+            and val.name.startswith("xi_")
         ]
     )
     substitutions.update(xi_substitutions)
@@ -344,11 +394,12 @@ def color_gradient_lb_method(stencil, force_field: ps.Field, omega_eff, omega_od
 
         return lb_method
 
-def create_collision_operator(configs, opts):
+def create_collision_operator(configs, opts, fluctuations):
         
     # create collision operator for component a
     collision_rule_a = lbmpy.create_lb_collision_rule(
-        lbm_config=configs[0], lbm_optimisation=opts[0]
+        lbm_config=configs[0], lbm_optimisation=opts[0],
+        fluctuating=fluctuations[0]
     )
     accessor_a = lbmpy.fieldaccess.CollideOnlyInplaceAccessor
     collide_a = lbmpy.updatekernels.create_lbm_kernel(
@@ -359,7 +410,8 @@ def create_collision_operator(configs, opts):
     )
     # create collision operator for component b
     collision_rule_b = lbmpy.create_lb_collision_rule(
-        lbm_config=configs[1], lbm_optimisation=opts[1]
+        lbm_config=configs[1], lbm_optimisation=opts[1],
+        fluctuating=fluctuations[1]
     )
     accessor_b = lbmpy.fieldaccess.CollideOnlyInplaceAccessor
     collide_b = lbmpy.updatekernels.create_lbm_kernel(
@@ -373,7 +425,10 @@ def create_collision_operator(configs, opts):
     collide_a = append_to_all_non_field_symbols(collide_a, "a")
     collide_b = append_to_all_non_field_symbols(collide_b, "b")
 
-    return collide_a.new_merged(collide_b)
+    return ps.AssignmentCollection(
+        main_assignments=collide_a.main_assignments + collide_b.main_assignments,
+        subexpressions=collide_a.subexpressions + collide_b.subexpressions,
+    )
 
 def single_perturbation_operator(fields, method, config, opt, minimum_color_gradient):
     stencil = method.stencil
@@ -591,12 +646,12 @@ def merged_collide_perturb_and_recoloring_operator(opts, collide, perturbation, 
         + recoloring.subexpressions,
     )
 
-    return ps.simp.sympy_cse(merged)
+    return sympy_cse_with_rng_nodes(merged)
 
-def create_collide_perturb_recolor_operator(fields, methods, configs, opts):
+def create_collide_perturb_recolor_operator(fields, methods, configs, opts, fluctuations):
 
     # create collide, perturbation and recoloring operator separately
-    collide = create_collision_operator(configs, opts)
+    collide = create_collision_operator(configs, opts, fluctuations)
     perturbation = perturbation_operator(fields, methods, configs, opts)
     recoloring = recoloring_operator(fields, methods, configs, opts, beta=sp.Symbol("beta"), minimum_color_gradient=0.0)
 

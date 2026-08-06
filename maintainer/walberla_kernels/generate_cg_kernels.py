@@ -88,12 +88,14 @@ def generate_cg_init_kernels(ctx, cg_fields, cg_methods):
         ctx.patch_file(stem, get_ext_source(target_suffix), patch_openmp_kernels)
 
 
-def generate_cg_collide_kernels(ctx, cg_fields, cg_methods, cg_configs, cg_opts):
+def generate_cg_collide_kernels(ctx, cg_fields, cg_methods, cg_configs, cg_opts, cg_fluctuations):
     precision_prefix = pystencils_espresso.precision_prefix[ctx.double_accuracy]
-    collide = color_gradient.create_collide_perturb_recolor_operator(cg_fields, cg_methods, cg_configs, cg_opts)
+    collide = color_gradient.create_collide_perturb_recolor_operator(cg_fields, cg_methods, cg_configs, cg_opts, cg_fluctuations)
+    block_offsets = cg_fluctuations[0]["block_offsets"]
     for params, target_suffix in paramlist(parameters, ("GPU", "CPU", "AVX")):
         stem = f"ColorGradientCollideSweep{precision_prefix}{target_suffix}"
-        pystencils_walberla.generate_sweep(ctx, stem, collide, **params)
+        pystencils_walberla.generate_sweep(
+            ctx, stem, collide, block_offset=block_offsets, **params)
         ctx.patch_file(stem, get_ext_source(target_suffix), patch_openmp_kernels)
 
 
@@ -133,10 +135,11 @@ with code_generation_context.CodeGeneration() as ctx:
     
     cg_configs = color_gradient.create_configs(cg_fields, cg_methods)
     cg_opts = color_gradient.create_opts(cg_fields)
+    cg_fluctuations = color_gradient.create_fluctuations(ctx.double_accuracy)
 
     if "cg_init" in args.kernels:
         generate_cg_init_kernels(ctx, cg_fields, cg_methods)
     if "cg_stream" in args.kernels:
         generate_cg_stream_kernels(ctx, cg_fields, cg_methods, cg_configs, cg_opts)
     if "cg_collide" in args.kernels:
-        generate_cg_collide_kernels(ctx, cg_fields, cg_methods, cg_configs, cg_opts)
+        generate_cg_collide_kernels(ctx, cg_fields, cg_methods, cg_configs, cg_opts, cg_fluctuations)

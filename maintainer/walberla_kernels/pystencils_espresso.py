@@ -54,6 +54,34 @@ def skip_philox_unthermalized(code, result_symbols, rng_name):
     return "\n".join(lines)
 
 
+def rename_rng_result_symbols(node, suffix):
+    """Append a suffix to an RNG node's result symbol names.
+    """
+    node.result_symbols = tuple(
+        TypedSymbol(f"{s.name}{suffix}", s.dtype) for s in node.result_symbols)
+    symbols_read = set.union(*[s.atoms(sp.Symbol) for s in node.args])
+    headers = node.headers
+    if CustomCodeNode is not None:
+        CustomCodeNode.__init__(
+            node, "", symbols_read=symbols_read,
+            symbols_defined=node.result_symbols)
+    node.headers = headers
+
+
+#: Suffix given to the result symbols of the "shifted" RNG nodes below, so they
+#: cannot clash with the unshifted ones in a merged kernel.
+#: Changing it requires clearing the codegen cache -- see PHILOX_KEY_OFFSET.
+PHILOX_SYMBOL_SUFFIX = "_shifted"
+
+#: Offset added to the Philox mode-index key  by the "shifted" RNG nodes below.
+#: Must exceed the number of RNG nodes emitted per collision rule: D3Q19 needs
+#: 15 random numbers, i.e. 8 ``philox_double2`` or 4 ``philox_float4`` calls.
+#:
+#: IF YOU CHANGE THIS VALUE, CLEAR THE CODEGEN CACHE BEFORE REGENERATING:
+#:     rm -rf ~/.cache/pystencils/joblib/lbmpy/creationfunctions
+PHILOX_KEY_OFFSET = 16
+
+
 class PhiloxTwoDoubles(ps.rng.PhiloxTwoDoubles):
     def get_code(self, *args, **kwargs):
         code = super().get_code(*args, **kwargs)
@@ -103,6 +131,24 @@ class PhiloxTwoDoublesModulo(ps.rng.PhiloxTwoDoubles):
                 symbols_read=symbols_read,
                 symbols_defined=self.result_symbols)
         self.headers = headers
+
+
+class PhiloxTwoDoublesShifted(PhiloxTwoDoubles):
+    """Like :class:`PhiloxTwoDoubles`, but drawing from a disjoint stream.
+
+    Shifts the mode-index key by :data:`PHILOX_KEY_OFFSET` so that a second
+    collision rule sharing the same seed and the same lattice site still gets
+    independent random numbers, and suffixes the result symbols so the two
+    rules can be merged into one kernel. Inherits the ``kT > 0`` guard.
+    """
+
+    def __init__(self, dim, time_step=TypedSymbol("time_step", np.uint32),
+                 offsets=None, keys=None):
+        if keys is None:
+            keys = (0,) * self._num_keys
+        keys = (keys[0] + PHILOX_KEY_OFFSET,) + tuple(keys[1:])
+        super().__init__(dim, time_step=time_step, offsets=offsets, keys=keys)
+        rename_rng_result_symbols(self, PHILOX_SYMBOL_SUFFIX)
 
 
 class PhiloxFourFloats(ps.rng.PhiloxFourFloats):
@@ -155,6 +201,18 @@ class PhiloxFourFloatsModulo(ps.rng.PhiloxFourFloats):
         self.headers = headers
 
 
+class PhiloxFourFloatsShifted(PhiloxFourFloats):
+    """Single-precision counterpart of :class:`PhiloxTwoDoublesShifted`."""
+
+    def __init__(self, dim, time_step=TypedSymbol("time_step", np.uint32),
+                 offsets=None, keys=None):
+        if keys is None:
+            keys = (0,) * self._num_keys
+        keys = (keys[0] + PHILOX_KEY_OFFSET,) + tuple(keys[1:])
+        super().__init__(dim, time_step=time_step, offsets=offsets, keys=keys)
+        rename_rng_result_symbols(self, PHILOX_SYMBOL_SUFFIX)
+
+
 numpy_types_to_cpp_types = {"float64": "double", "float32": "float"}
 precision_prefix = {
     True: 'DoublePrecision',
@@ -168,6 +226,9 @@ precision_rng = {
 precision_rng_modulo = {
     True: PhiloxTwoDoublesModulo,
     False: PhiloxFourFloatsModulo}
+precision_rng_shifted = {
+    True: PhiloxTwoDoublesShifted,
+    False: PhiloxFourFloatsShifted}
 
 
 def generate_fields(stencil, data_type, field_layout='fzyx'):

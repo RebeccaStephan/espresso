@@ -249,15 +249,6 @@ class LBFluid(ScriptInterfaceHelper, espressomd.detail.walberla.LatticeModel):
                     "Parameter 'kinematic_viscosity' must be a float "
                     "or a list of floats")
 
-        # two-component mode validation
-        visc = params.get("kinematic_viscosity")
-        if visc is not None and len(visc) == 2:
-            kT = params.get("kT", 0.)
-            if kT > 0.:
-                raise ValueError(
-                    "Thermalization (kT > 0) is not supported "
-                    "for two-component color gradient LB")
-
         utils.check_required_keys(self.required_keys(), params.keys())
         utils.check_valid_keys(self.valid_keys(), params.keys())
 
