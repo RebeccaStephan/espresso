@@ -54,8 +54,8 @@ namespace pystencils {
 class ColorGradientCollideSweepSinglePrecision
 {
 public:
-   ColorGradientCollideSweepSinglePrecision( BlockDataID force_aID_, BlockDataID force_bID_, BlockDataID pdfs_aID_, BlockDataID pdfs_bID_, BlockDataID phasefieldID_, BlockDataID rho_aID_, BlockDataID rho_bID_, BlockDataID velocityID_, float beta, float omega_shear_a, float omega_shear_b, float sigma )
-     : force_aID(force_aID_), force_bID(force_bID_), pdfs_aID(pdfs_aID_), pdfs_bID(pdfs_bID_), phasefieldID(phasefieldID_), rho_aID(rho_aID_), rho_bID(rho_bID_), velocityID(velocityID_), beta_(beta), omega_shear_a_(omega_shear_a), omega_shear_b_(omega_shear_b), sigma_(sigma)
+   ColorGradientCollideSweepSinglePrecision( BlockDataID force_aID_, BlockDataID force_bID_, BlockDataID pdfs_aID_, BlockDataID pdfs_bID_, BlockDataID phasefieldID_, BlockDataID rho_aID_, BlockDataID rho_bID_, BlockDataID velocityID_, float beta, float kT, float omega_shear_a, float omega_shear_b, uint32_t seed, float sigma, uint32_t time_step )
+     : force_aID(force_aID_), force_bID(force_bID_), pdfs_aID(pdfs_aID_), pdfs_bID(pdfs_bID_), phasefieldID(phasefieldID_), rho_aID(rho_aID_), rho_bID(rho_bID_), velocityID(velocityID_), beta_(beta), kT_(kT), omega_shear_a_(omega_shear_a), omega_shear_b_(omega_shear_b), seed_(seed), sigma_(sigma), time_step_(time_step), block_offset_0_(uint32_t(0)) , block_offset_1_(uint32_t(0)) , block_offset_2_(uint32_t(0)) , configured_(false)
    {}
 
    
@@ -100,19 +100,38 @@ public:
    }
 
    
-   void configure( const shared_ptr<StructuredBlockStorage> & /*blocks*/, IBlock * /*block*/ ){}
+   void configure( const shared_ptr<StructuredBlockStorage> & blocks, IBlock * block )
+   {
+   Cell BlockCellBB = blocks->getBlockCellBB( *block).min();
+   block_offset_0_ = uint32_t(BlockCellBB[0]);
+   block_offset_1_ = uint32_t(BlockCellBB[1]);
+   block_offset_2_ = uint32_t(BlockCellBB[2]);
+   configured_ = true;
+   }
    
 
    
 
    inline float getBeta() const { return beta_; }
+   inline uint32_t getBlock_offset_0() const { return block_offset_0_; }
+   inline uint32_t getBlock_offset_1() const { return block_offset_1_; }
+   inline uint32_t getBlock_offset_2() const { return block_offset_2_; }
+   inline float getKt() const { return kT_; }
    inline float getOmega_shear_a() const { return omega_shear_a_; }
    inline float getOmega_shear_b() const { return omega_shear_b_; }
+   inline uint32_t getSeed() const { return seed_; }
    inline float getSigma() const { return sigma_; }
+   inline uint32_t getTime_step() const { return time_step_; }
    inline void setBeta(const float value) { beta_ = value; }
+   inline void setBlock_offset_0(const uint32_t value) { block_offset_0_ = value; }
+   inline void setBlock_offset_1(const uint32_t value) { block_offset_1_ = value; }
+   inline void setBlock_offset_2(const uint32_t value) { block_offset_2_ = value; }
+   inline void setKt(const float value) { kT_ = value; }
    inline void setOmega_shear_a(const float value) { omega_shear_a_ = value; }
    inline void setOmega_shear_b(const float value) { omega_shear_b_ = value; }
+   inline void setSeed(const uint32_t value) { seed_ = value; }
    inline void setSigma(const float value) { sigma_ = value; }
+   inline void setTime_step(const uint32_t value) { time_step_ = value; }
 
 private:
    
@@ -125,12 +144,19 @@ private:
    BlockDataID rho_bID;
    BlockDataID velocityID;
    float beta_;
+   uint32_t block_offset_0_;
+   uint32_t block_offset_1_;
+   uint32_t block_offset_2_;
+   float kT_;
    float omega_shear_a_;
    float omega_shear_b_;
+   uint32_t seed_;
    float sigma_;
+   uint32_t time_step_;
 
    
 
+   bool configured_;
    
 };
 
