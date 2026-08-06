@@ -288,13 +288,35 @@ class ColorGradientLBTest(ut.TestCase):
         np.testing.assert_allclose(
             densities_slice, densities_node, rtol=1e-10)
 
-    def test_thermalized_cg_rejected(self):
-        """kT > 0 should be rejected for two-component mode."""
-        with self.assertRaisesRegex(ValueError, "not supported.*two-component"):
-            espressomd.lb.LBFluid(
-                agrid=AGRID, density=RHO_0, tau=self.system.time_step,
-                kinematic_viscosity=[VISCOSITY, VISCOSITY],
-                kT=1.0, seed=42)
+    def test_thermalized_cg_accepted(self):
+        """kT > 0 is accepted for two-component mode and thermalizes it.
+
+        Only checks that the parameters arrive and that the RNG counter is
+        live -- whether the noise satisfies fluctuation-dissipation is a
+        separate question.
+        """
+        lbf = espressomd.lb.LBFluid(
+            agrid=AGRID, density=RHO_0, tau=self.system.time_step,
+            kinematic_viscosity=[VISCOSITY, VISCOSITY],
+            kT=1.0, seed=42)
+        self.system.lb = lbf
+        self.assertAlmostEqual(lbf.kT, 1.0, delta=1e-10)
+        self.assertEqual(lbf.seed, 42)
+        # the RNG counter is exposed once thermalized, and advances per step
+        self.assertEqual(lbf.rng_state, 0)
+        self.system.integrator.run(2)
+        self.assertEqual(lbf.rng_state, 2)
+
+    def test_unthermalized_cg_has_no_rng_state(self):
+        """kT == 0 keeps the two-component model unthermalized."""
+        lbf = espressomd.lb.LBFluid(
+            agrid=AGRID, density=RHO_0, tau=self.system.time_step,
+            kinematic_viscosity=[VISCOSITY, VISCOSITY])
+        self.system.lb = lbf
+        self.assertEqual(lbf.kT, 0.0)
+        self.assertIsNone(lbf.rng_state)
+        with self.assertRaisesRegex(RuntimeError, "unthermalized"):
+            lbf.rng_state = 5
 
     def test_single_viscosity_not_two_component(self):
         """Single viscosity should not create a two-component LB."""
