@@ -26,7 +26,8 @@ import pystencils_walberla
 import sympy as sp
 import pystencils_walberla.utility
 from lbmpy.boundaries.boundaryhandling import create_lattice_boltzmann_boundary_kernel
-from lbmpy_walberla.additional_data_handler import default_additional_data_handler
+from lbmpy_walberla.additional_data_handler import (
+    default_additional_data_handler, UBBAdditionalDataHandler)
 from pystencils import Field, FieldType, Target
 from lbmpy.advanced_streaming import Timestep
 from pystencils.boundaries.boundaryhandling import create_boundary_kernel
@@ -209,6 +210,19 @@ class FluxAdditionalDataHandler(
     @property
     def additional_member_variable(self):
         return f"std::function<Vector3<{self.data_type}>(const Cell &, const shared_ptr<StructuredBlockForest>&, IBlock&)> elementInitaliser; "  # nopep8
+
+
+class BounceBackSlipVelocityUBB(UBBAdditionalDataHandler):
+    '''
+    Dynamic UBB that implements the bounce-back method with slip velocity.
+    '''
+
+    def __init__(self, stencil, boundary_object):
+        super().__init__(stencil, boundary_object)
+        self.Q = stencil.Q
+        self.neighbor_directions = [
+            np.array2string(x, separator=",") for x in np.array(
+                stencil.stencil_entries).transpose()]
 
 
 def generate_lb_boundary(

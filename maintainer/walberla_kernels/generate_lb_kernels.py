@@ -46,7 +46,6 @@ for module, requirement in [(ps, "==1.4.0"), (lbmpy, "==1.4.0")]:
 
 import pystencils_walberla
 import pystencils_espresso
-import lbmpy_walberla.additional_data_handler
 import lbmpy.creationfunctions
 import lbmpy.macroscopic_value_kernels
 import lbmpy.forcemodels
@@ -58,7 +57,7 @@ import relaxation_rates
 import walberla_lbm_generation
 import code_generation_context
 import custom_additional_extensions
-from kernel_generation_utils import paramlist, get_ext_source, patch_openmp_kernels
+from kernel_generation_utils import paramlist, get_ext_header, get_ext_source, patch_openmp_kernels
 
 if args.gpu:
     target = ps.Target.GPU
@@ -98,18 +97,7 @@ lbm_config_kwargs = dict(
 np2cpp_t = pystencils_espresso.numpy_types_to_cpp_types
 
 
-class BounceBackSlipVelocityUBB(
-        lbmpy_walberla.additional_data_handler.UBBAdditionalDataHandler):
-    '''
-    Dynamic UBB that implements the bounce-back method with slip velocity.
-    '''
-
-    def __init__(self, stencil, boundary_object):
-        super().__init__(stencil, boundary_object)
-        self.Q = stencil.Q
-        self.neighbor_directions = [
-            np.array2string(x, separator=",") for x in np.array(
-                stencil.stencil_entries).transpose()]
+BounceBackSlipVelocityUBB = custom_additional_extensions.BounceBackSlipVelocityUBB
 
 
 def generate_init_kernels(ctx, method):

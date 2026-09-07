@@ -92,11 +92,15 @@ template <typename FloatType, lbmpy::Arch Architecture>
 class LBWalberlaImplColorGradient
     : public LBWalberlaCommon<
           LBWalberlaImplColorGradient<FloatType, Architecture>, FloatType,
-          Architecture>,
+          Architecture,
+          typename detail::KernelTrait<FloatType,
+                                       Architecture>::DynamicUBBTwoComponent>,
       public virtual LBWalberlaColorGradientBase {
-  using Base =
-      LBWalberlaCommon<LBWalberlaImplColorGradient<FloatType, Architecture>,
-                       FloatType, Architecture>;
+  using Base = LBWalberlaCommon<
+      LBWalberlaImplColorGradient<FloatType, Architecture>, FloatType,
+      Architecture,
+      typename detail::KernelTrait<FloatType,
+                                   Architecture>::DynamicUBBTwoComponent>;
   friend Base;
 
 protected:

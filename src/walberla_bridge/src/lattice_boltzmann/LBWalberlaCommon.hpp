@@ -111,7 +111,9 @@ inline void interpolate_bspline_at_pos(Utils::Vector3d const &pos,
  * UBB boundary scaffolding, off-lattice read-side interpolation, and the
  * non-CG ghost-comm scaffolding.
  */
-template <class Derived, typename FloatType, lbmpy::Arch Architecture>
+template <class Derived, typename FloatType, lbmpy::Arch Architecture,
+         typename BoundaryKernel =
+             typename detail::KernelTrait<FloatType, Architecture>::DynamicUBB>
 class LBWalberlaCommon : public virtual LBWalberlaBase {
 #if not defined(WALBERLA_BUILD_WITH_CUDA)
   static_assert(Architecture != lbmpy::Arch::GPU,
@@ -126,8 +128,8 @@ protected:
   // ---- Types & Constants ----
 
   using Kernels = detail::KernelTrait<FloatType, Architecture>;
-  using BoundaryModel = BoundaryHandling<FloatType, Vector3<FloatType>,
-                                         typename Kernels::DynamicUBB>;
+  using BoundaryModel =
+      BoundaryHandling<FloatType, Vector3<FloatType>, BoundaryKernel>;
 
 public:
   /** @brief Stencil for collision and streaming operations. */
@@ -516,7 +518,7 @@ public:
                                                   int dir) const {
     Utils::Vector3i neighbor({0, 0, 0});
     auto const &grid_size = get_lattice().get_grid_dimensions();
-    auto constexpr neighbor_offset = Kernels::DynamicUBB::neighborOffset;
+    auto constexpr neighbor_offset = BoundaryKernel::neighborOffset;
     for (int i = 0; i < neighbor.size(); i++) {
       neighbor[i] =
           (node[i] - neighbor_offset[i][dir] + grid_size[i]) % grid_size[i];

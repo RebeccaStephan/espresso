@@ -23,6 +23,8 @@
 
 #include "generated_kernels/DynamicUBBDoublePrecision.h"
 #include "generated_kernels/DynamicUBBSinglePrecision.h"
+#include "generated_kernels/DynamicUBBColorGradientDoublePrecision.h"
+#include "generated_kernels/DynamicUBBColorGradientSinglePrecision.h"
 #include "generated_kernels/FieldAccessorsDoublePrecision.h"
 #include "generated_kernels/FieldAccessorsSinglePrecision.h"
 #include "generated_kernels/InitialPDFsSetterDoublePrecision.h"
@@ -84,6 +86,7 @@ struct KernelTrait {
   using PackInfoVec = pystencils::PackInfoVecDoublePrecision;
   using InitialPDFsSetterTwoComponent = pystencils::ColorGradientInitialPDFsSetterDoublePrecision;
   using DynamicUBB = lbm::DynamicUBBDoublePrecision;
+  using DynamicUBBTwoComponent = lbm::DynamicUBBColorGradientDoublePrecision;
 };
 
 template <> struct KernelTrait<float, lbmpy::Arch::CPU> {
@@ -112,6 +115,7 @@ template <> struct KernelTrait<float, lbmpy::Arch::CPU> {
   using PackInfoVec = pystencils::PackInfoVecSinglePrecision;
   using InitialPDFsSetterTwoComponent = pystencils::ColorGradientInitialPDFsSetterSinglePrecision;
   using DynamicUBB = lbm::DynamicUBBSinglePrecision;
+  using DynamicUBBTwoComponent = lbm::DynamicUBBColorGradientSinglePrecision;
 };
 
 } // namespace detail
