@@ -226,8 +226,16 @@ template <typename FloatType, lbmpy::Arch Architecture>
 std::optional<Utils::VectorXd<9>>
 LBWalberlaImplColorGradient<FloatType, Architecture>::get_node_pressure_tensor(
     Utils::Vector3i const &node) const {
-  throw std::runtime_error(
-      "pressure tensor not implemented for two-component LB");
+  auto bc = get_block_and_cell(get_lattice(), node, false);
+  if (!bc)
+    return std::nullopt;
+
+  auto const pdf_field_a =
+      bc->block->template getData<PdfField>(m_pdf_field_id[0]);
+  auto const pdf_field_b =
+      bc->block->template getData<PdfField>(m_pdf_field_id[1]);
+  return to_vector9d(
+      pressure_tensor_from_populations(pdf_field_a, pdf_field_b, bc->cell));
 }
 
 } // namespace walberla

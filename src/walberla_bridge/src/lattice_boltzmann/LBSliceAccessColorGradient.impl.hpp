@@ -316,8 +316,40 @@ std::vector<double>
 LBWalberlaImplColorGradient<FloatType, Architecture>::get_slice_pressure_tensor(
     Utils::Vector3i const &lower_corner,
     Utils::Vector3i const &upper_corner) const {
-  throw std::runtime_error(
-      "pressure tensor not implemented for two-component LB");
+  std::vector<double> out;
+  for_each_block_in_slice(
+      get_lattice(), lower_corner, upper_corner,
+      [&](auto const &block, auto const &bci, auto const &ci,
+          auto const &block_offset) {
+        if (out.empty())
+          out.resize(9u * ci.numCells());
+
+        auto const pdf_field_a =
+            block.template getData<PdfField>(m_pdf_field_id[0]);
+        auto const pdf_field_b =
+            block.template getData<PdfField>(m_pdf_field_id[1]);
+
+        // Reads pre-collision populations via a neighbor-offset pull (see
+        // raw_pressure_tensor_moment()), so the third copy_block_buffer
+        // argument -- the node in block-local-offset space -- is needed
+        // here (unlike other slice accessors, which only need the
+        // pre-fetched bulk buffer indices).
+        auto kernel = [&out, &block_offset, pdf_field_a, pdf_field_b, this](
+                          unsigned const /* block_index */,
+                          unsigned const local_index,
+                          Utils::Vector3i const &node) {
+          auto const local = node - block_offset;
+          auto const cell = Cell{local[0], local[1], local[2]};
+          auto const tensor =
+              pressure_tensor_from_populations(pdf_field_a, pdf_field_b, cell);
+          for (uint_t f = 0u; f < 9u; ++f) {
+            out[9u * local_index + f] = double_c(tensor[f]);
+          }
+        };
+
+        copy_block_buffer(bci, ci, block_offset, lower_corner, kernel);
+      });
+  return out;
 }
 
 } // namespace walberla

@@ -25,7 +25,8 @@ Tests:
   - Density set/get for two-component mode (node and slice)
   - Population get/set for two-component mode (node and slice)
   - Setting velocity raises RuntimeError in two-component mode
-  - Pressure tensor raises RuntimeError in two-component mode
+  - Pressure tensor matches the analytical equilibrium value (node and
+    slice) right after init_two_component()
   - Velocity getter returns sensible values after integration
   - init_two_component produces PDFs consistent with set densities
   - Viscosity setter works on live CG fluid
@@ -206,16 +207,51 @@ class ColorGradientLBTest(ut.TestCase):
         with self.assertRaisesRegex(RuntimeError, "not supported for two-component"):
             lbf[:, :, :].velocity = np.zeros((DOMAIN_SIZE,) * 3 + (3,))
 
-    def test_pressure_tensor_raises(self):
-        """Pressure tensor should raise in two-component mode."""
+    def test_pressure_tensor(self):
+        """
+        Right after init_two_component(), the fluid is at rest (u = 0) and
+        every population sits exactly at its local equilibrium, so the
+        pressure tensor P = sum_i f_i c_i c_i must be purely isotropic:
+        diagonal = rho_total * c_s**2, off-diagonal = 0 (color_gradient.tex).
+        This holds pointwise across the whole droplet -- bulk and interface
+        alike -- because both components share the same reference density
+        (gamma = 1), so alpha_a = alpha_b = 1/3 everywhere and the
+        density-weighted average alpha-bar collapses to 1/3 regardless of
+        the local density fractions.
+        """
         lbf = self._create_lbf()
         self._init_droplet(lbf)
 
-        with self.assertRaisesRegex(RuntimeError, "not implemented for two-component"):
-            _ = lbf[0, 0, 0].pressure_tensor
+        c_s_sq = 1.0 / 3.0
+        N = int(DOMAIN_SIZE / AGRID)
+        densities = np.copy(lbf[:, :, :].density)
+        rho_total = densities[..., 0] + densities[..., 1]
 
-        with self.assertRaisesRegex(RuntimeError, "not implemented for two-component"):
-            _ = lbf[:, :, :].pressure_tensor
+        # Node-level: sample points spanning bulk (inside/outside the
+        # droplet) and the interface.
+        for x in range(0, N, N // 3):
+            for y in range(0, N, N // 3):
+                for z in range(0, N, N // 3):
+                    P = np.copy(lbf[x, y, z].pressure_tensor)
+                    self.assertEqual(P.shape, (3, 3))
+                    expected_diag = rho_total[x, y, z] * c_s_sq
+                    np.testing.assert_allclose(
+                        np.diag(P), expected_diag, rtol=1e-9)
+                    off_diag = P - np.diag(np.diag(P))
+                    np.testing.assert_allclose(off_diag, 0.0, atol=1e-9)
+
+        # Slice-level: shape, symmetry, and consistency with node access.
+        P_slice = np.copy(lbf[:, :, :].pressure_tensor)
+        self.assertEqual(P_slice.shape, (N, N, N, 3, 3))
+        np.testing.assert_allclose(
+            P_slice, np.swapaxes(P_slice, -1, -2), atol=1e-10)
+        np.testing.assert_allclose(
+            P_slice[3, 3, 3], np.copy(lbf[3, 3, 3].pressure_tensor),
+            atol=1e-10)
+        expected_diag_slice = rho_total * c_s_sq
+        for i in range(3):
+            np.testing.assert_allclose(
+                P_slice[..., i, i], expected_diag_slice, rtol=1e-9)
 
     def test_velocity_getter(self):
         """Velocity getter should return finite values after integration."""
