@@ -95,6 +95,16 @@ Variant LBFluidSlice::do_call_method(std::string const &name,
     auto const dens_size = m_shape_val.at("density");
     return call(&LatticeModel::set_slice_density, dens_size, m_conv_dens);
   }
+  if (name == "get_phasefield") {
+    context()->parallel_try_catch([this]() {
+      if (not dynamic_cast<LBWalberlaColorGradientBase const *>(
+              m_lb_fluid.get())) {
+        throw std::runtime_error(
+            "the phase field is only defined for two-component LB");
+      }
+    });
+    return call(&LatticeModel::get_slice_phasefield, {1});
+  }
   if (name == "get_velocity") {
     return call(&LatticeModel::get_slice_velocity, {3}, 1. / m_conv_velocity);
   }

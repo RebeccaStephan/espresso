@@ -51,6 +51,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -245,11 +246,21 @@ void LBFluid::do_construct(VariantMap const &params) {
     make_instance(params);
     m_mpi_cart_comm_observer = ::walberla::get_mpi_cart_comm_observer();
     m_instance->set_collision_model(lb_kT, seed);
+    m_sigma = get_value_or<double>(params, "sigma", 0.);
+    m_beta = get_value_or<double>(params, "beta", 0.7);
     if (m_color_gradient) {
-      auto const sigma =
-          get_value_or<double>(params, "sigma", 0.) * m_conv_energy;
-      auto const beta = get_value_or<double>(params, "beta", 0.7);
-      m_color_gradient->set_collision_model_color_gradient(sigma, beta);
+      m_color_gradient->set_collision_model_color_gradient(
+          m_sigma * m_conv_energy, m_beta);
+    }
+    // restore the RNG counter when deserializing a thermalized fluid;
+    // must come after the collision model setup, which resets the counter
+    if (lb_kT > 0. and params.contains("rng_state") and
+        is_type<int>(params.at("rng_state"))) {
+      auto const rng_state = get_value<int>(params, "rng_state");
+      if (rng_state < 0) {
+        throw std::domain_error("Parameter 'rng_state' must be >= 0");
+      }
+      m_instance->set_rng_state(static_cast<uint64_t>(rng_state));
     }
     m_instance->set_external_force(lb_ext_f);
     m_instance->ghost_communication();
@@ -289,12 +300,31 @@ Variant LBFluid::get_interpolated_velocity(Utils::Vector3d const &pos) const {
          m_conv_speed;
 }
 
+/*
+ * Checkpoint file layout (ASCII or binary, same field order):
+ *   grid_size, pop_size (= n_components * stencil_size)
+ *   two-component only: has_rng [, rng_state]
+ *   per node in (i, j, k) order:
+ *     populations (pop_size values)
+ *     last_applied_force (one 3-vector per component)
+ *     two-component only: density (2 values), phasefield, velocity
+ *     is_boundary [, slip_velocity]
+ * Single-component files are unchanged by the two-component extension.
+ * The two-component derived fields are stored rather than recomputed, since
+ * the particle coupling reads them before the next LB step.
+ */
+
 void LBFluid::load_checkpoint(std::filesystem::path const &path, int mode) {
   auto &lb_obj = *m_instance;
+  auto *const cg_obj = m_color_gradient;
+  auto const n_components = (cg_obj) ? std::size_t{2u} : std::size_t{1u};
+  auto const pop_size = n_components * lb_obj.stencil_size();
+  std::optional<uint64_t> rng_state;
 
-  auto const read_metadata = [&lb_obj](CheckpointFile &cpfile) {
+  auto const read_metadata = [&lb_obj, cg_obj, pop_size,
+                              &rng_state](CheckpointFile &cpfile) {
     auto const expected_grid_size = lb_obj.get_lattice().get_grid_dimensions();
-    auto const expected_pop_size = lb_obj.stencil_size();
+    auto const expected_pop_size = pop_size;
     Utils::Vector3i read_grid_size;
     std::size_t read_pop_size;
     cpfile.read(read_grid_size);
@@ -310,29 +340,53 @@ void LBFluid::load_checkpoint(std::filesystem::path const &path, int mode) {
                                std::to_string(read_pop_size) + ", expected " +
                                std::to_string(expected_pop_size) + ".");
     }
+    if (cg_obj) {
+      int has_rng;
+      cpfile.read(has_rng);
+      if (has_rng) {
+        uint64_t counter;
+        cpfile.read(counter);
+        rng_state = counter;
+      }
+    }
   };
 
-  auto const read_data = [&lb_obj](CheckpointFile &cpfile) {
+  auto const read_data = [&lb_obj, cg_obj, pop_size,
+                          n_components](CheckpointFile &cpfile) {
     auto const grid_size = lb_obj.get_lattice().get_grid_dimensions();
     auto const i_max = grid_size[0];
     auto const j_max = grid_size[1];
     auto const k_max = grid_size[2];
     LBWalberlaNodeState cpnode;
-    cpnode.populations.resize(lb_obj.stencil_size());
+    cpnode.populations.resize(pop_size);
+    cpnode.last_applied_force.resize(n_components);
+    if (cg_obj) {
+      cpnode.density.resize(2u);
+    }
     for (int i = 0; i < i_max; i++) {
       for (int j = 0; j < j_max; j++) {
         for (int k = 0; k < k_max; k++) {
           auto const ind = Utils::Vector3i{{i, j, k}};
           cpfile.read(cpnode.populations);
-          cpfile.read(cpnode.last_applied_force);
+          for (auto &force : cpnode.last_applied_force) {
+            cpfile.read(force);
+          }
+          if (cg_obj) {
+            cpfile.read(cpnode.density);
+            cpfile.read(cpnode.phasefield);
+            cpfile.read(cpnode.velocity);
+          }
           cpfile.read(cpnode.is_boundary);
           if (cpnode.is_boundary) {
             cpfile.read(cpnode.slip_velocity);
           }
           lb_obj.set_node_population(ind, cpnode.populations);
-          lb_obj.set_node_last_applied_force(
-              ind, std::vector<Utils::Vector3d>{cpnode.last_applied_force,
-                                                Utils::Vector3d{}});
+          lb_obj.set_node_last_applied_force(ind, cpnode.last_applied_force);
+          if (cg_obj) {
+            lb_obj.set_node_density(ind, cpnode.density);
+            cg_obj->set_node_phasefield(ind, cpnode.phasefield);
+            cg_obj->set_node_velocity_raw(ind, cpnode.velocity);
+          }
           if (cpnode.is_boundary) {
             lb_obj.set_node_velocity_at_boundary(ind, cpnode.slip_velocity);
           }
@@ -341,9 +395,12 @@ void LBFluid::load_checkpoint(std::filesystem::path const &path, int mode) {
     }
   };
 
-  auto const on_success = [&lb_obj]() {
+  auto const on_success = [&lb_obj, &rng_state]() {
     lb_obj.ghost_communication();
     lb_obj.reallocate_ubb_field();
+    if (rng_state and lb_obj.get_rng_state()) {
+      lb_obj.set_rng_state(*rng_state);
+    }
   };
 
   load_checkpoint_common(*context(), "LB", path, mode, read_metadata, read_data,
@@ -352,15 +409,24 @@ void LBFluid::load_checkpoint(std::filesystem::path const &path, int mode) {
 
 void LBFluid::save_checkpoint(std::filesystem::path const &path, int mode) {
   auto &lb_obj = *m_instance;
+  auto *const cg_obj = m_color_gradient;
+  auto const n_components = (cg_obj) ? std::size_t{2u} : std::size_t{1u};
+  auto const pop_size = n_components * lb_obj.stencil_size();
 
-  auto const write_metadata = [&lb_obj,
+  auto const write_metadata = [&lb_obj, cg_obj, pop_size,
                                mode](std::shared_ptr<CheckpointFile> cpfile_ptr,
                                      Context const &context) {
     auto const grid_size = lb_obj.get_lattice().get_grid_dimensions();
-    auto const pop_size = lb_obj.stencil_size();
     if (context.is_head_node()) {
       cpfile_ptr->write(grid_size);
       cpfile_ptr->write(pop_size);
+      if (cg_obj) {
+        auto const rng_state = lb_obj.get_rng_state();
+        cpfile_ptr->write(static_cast<int>(rng_state.has_value()));
+        if (rng_state) {
+          cpfile_ptr->write(*rng_state);
+        }
+      }
       unit_test_handle(mode);
     }
   };
@@ -373,7 +439,7 @@ void LBFluid::save_checkpoint(std::filesystem::path const &path, int mode) {
     }
   };
 
-  auto const write_data = [&lb_obj,
+  auto const write_data = [&lb_obj, cg_obj,
                            mode](std::shared_ptr<CheckpointFile> cpfile_ptr,
                                  Context const &context) {
     auto const get_node_checkpoint =
@@ -382,17 +448,31 @@ void LBFluid::save_checkpoint(std::filesystem::path const &path, int mode) {
       auto const laf = lb_obj.get_node_last_applied_force(ind);
       auto const lbb = lb_obj.get_node_is_boundary(ind);
       auto const vbb = lb_obj.get_node_velocity_at_boundary(ind);
-      if (pop and laf and lbb and ((*lbb) ? vbb.has_value() : true)) {
-        LBWalberlaNodeState cpnode;
-        cpnode.populations = *pop;
-        cpnode.last_applied_force = laf->front(); // component a (CG: a only)
-        cpnode.is_boundary = *lbb;
-        if (*lbb) {
-          cpnode.slip_velocity = *vbb;
-        }
-        return {cpnode};
+      if (not(pop and laf and lbb and ((*lbb) ? vbb.has_value() : true))) {
+        return std::nullopt;
       }
-      return std::nullopt;
+      LBWalberlaNodeState cpnode;
+      cpnode.populations = *pop;
+      cpnode.last_applied_force = *laf;
+      if (cg_obj) {
+        auto const dens = lb_obj.get_node_density(ind);
+        auto const phi = cg_obj->get_node_phasefield(ind);
+        auto const vel = cg_obj->get_node_velocity_raw(ind);
+        if (not(dens and phi and vel)) {
+          return std::nullopt;
+        }
+        cpnode.density = *dens;
+        cpnode.phasefield = *phi;
+        cpnode.velocity = *vel;
+      } else {
+        // SC stores a single force
+        cpnode.last_applied_force.resize(1u);
+      }
+      cpnode.is_boundary = *lbb;
+      if (*lbb) {
+        cpnode.slip_velocity = *vbb;
+      }
+      return {cpnode};
     };
 
     auto failure = false;
@@ -423,7 +503,14 @@ void LBFluid::save_checkpoint(std::filesystem::path const &path, int mode) {
             }
             auto &cpfile = *cpfile_ptr;
             cpfile.write(cpnode.populations);
-            cpfile.write(cpnode.last_applied_force);
+            for (auto const &force : cpnode.last_applied_force) {
+              cpfile.write(force);
+            }
+            if (cg_obj) {
+              cpfile.write(cpnode.density);
+              cpfile.write(cpnode.phasefield);
+              cpfile.write(cpnode.velocity);
+            }
             cpfile.write(cpnode.is_boundary);
             if (cpnode.is_boundary) {
               cpfile.write(cpnode.slip_velocity);

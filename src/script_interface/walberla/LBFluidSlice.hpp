@@ -133,6 +133,7 @@ public:
     m_shape_val["population"] = {
         static_cast<int>(color_gradient ? 2 * m_lb_fluid->stencil_size()
                                         : m_lb_fluid->stencil_size())};
+    m_shape_val["phasefield"] = {1};
     m_shape_val["velocity"] = {3};
     m_shape_val["velocity_at_boundary"] = {1};
     m_shape_val["is_boundary"] = {1};

@@ -438,6 +438,28 @@ private:
     }
   }
 
+public:
+  /**
+   * @brief Rebuild the UBB index vectors, then re-apply the boundary sweep.
+   *
+   * The index vectors only hold links that start from interior fluid cells,
+   * so the population of a boundary cell pointing to a ghost fluid cell
+   * never receives a bounce-back value. After a time step, the correct
+   * value lives in the ghost image of that boundary cell, where the
+   * interior fluid cell pulls it from. A full PDF ghost communication
+   * (e.g. when loading a checkpoint) overwrites these ghost images with the
+   * interior boundary cell values. Between time steps the sweep is
+   * idempotent (it reads fluid cells and only writes boundary cells), so
+   * re-applying it restores the ghost images.
+   */
+  void reallocate_ubb_field() override {
+    Base::reallocate_ubb_field();
+    if (m_has_boundaries) {
+      ghost_communication_pdf();
+      integrate_boundaries(get_lattice().get_blocks());
+    }
+  }
+
 private:
   // ---- Relaxation Rate Helpers ----
 
@@ -536,6 +558,7 @@ public:
     if (!m_pending_ghost_comm.any())
       return;
     assert(m_mpi_cart_comm_observer.is_valid());
+    ghost_communication_boundary();
     ghost_communication_pdf();
     ghost_communication_phasefield();
     ghost_communication_vel();
@@ -611,6 +634,11 @@ public:
                     bool consider_ghosts = false) const override;
   bool set_node_velocity(Utils::Vector3i const &node,
                          Utils::Vector3d const &v) override;
+  bool set_node_velocity_raw(Utils::Vector3i const &node,
+                             Utils::Vector3d const &v) override;
+  std::optional<Utils::Vector3d>
+  get_node_velocity_raw(Utils::Vector3i const &node,
+                        bool consider_ghosts = false) const override;
   std::vector<double>
   get_slice_velocity(Utils::Vector3i const &lower_corner,
                      Utils::Vector3i const &upper_corner) const override;
@@ -635,6 +663,11 @@ public:
   std::optional<double>
   get_node_phasefield(Utils::Vector3i const &node,
                       bool consider_ghosts = false) const override;
+  bool set_node_phasefield(Utils::Vector3i const &node,
+                           double phasefield) override;
+  std::vector<double>
+  get_slice_phasefield(Utils::Vector3i const &lower_corner,
+                       Utils::Vector3i const &upper_corner) const override;
 
   // Population
   std::optional<std::vector<double>>

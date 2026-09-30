@@ -67,8 +67,8 @@ checkpoint = espressomd.checkpointing.Checkpoint(
 
 # Lees-Edwards boundary conditions
 le_active = False
-if 'INT.NPT' not in modes and 'LB.GPU' not in modes and (
-        'LB' not in modes or n_nodes in (1, 2, 3)):
+if 'INT.NPT' not in modes and 'LB.GPU' not in modes and \
+        'LB.CG' not in modes and ('LB' not in modes or n_nodes in (1, 2, 3)):
     le_active = True
     protocol = espressomd.lees_edwards.LinearShear(
         initial_pos_offset=0.1, time_0=0.2, shear_velocity=1.2)
@@ -90,14 +90,36 @@ if espressomd.has_features('WALBERLA') and 'LB.WALBERLA' in modes:
         **lb_lattice_kwargs)
 if lbf_class:
     lbf_cpt_mode = 0 if 'LB.ASCII' in modes else 1
-    lbf = lbf_class(
-        lattice=lb_lattice, kinematic_viscosity=1.3, density=1.5,
-        tau=system.time_step, gpu='LB.GPU' in modes)
+    if 'LB.CG' in modes:
+        lbf = lbf_class(
+            lattice=lb_lattice, kinematic_viscosity=[1.3, 0.9], density=1.5,
+            sigma=0.05, beta=0.6, kT=1e-3, seed=42,
+            tau=system.time_step, gpu='LB.GPU' in modes)
+    else:
+        lbf = lbf_class(
+            lattice=lb_lattice, kinematic_viscosity=1.3, density=1.5,
+            tau=system.time_step, gpu='LB.GPU' in modes)
     wall1 = espressomd.shapes.Wall(normal=(1, 0, 0), dist=1.0)
     wall2 = espressomd.shapes.Wall(normal=(-1, 0, 0),
                                    dist=-(system.box_l[0] - 1.0))
     lbf.add_boundary_from_shape(wall1, (1e-4, 1e-4, 0))
     lbf.add_boundary_from_shape(wall2, (0, 0, 0))
+
+    if 'LB.CG' in modes:
+        # small droplet of component b in a matrix of component a
+        agrid = lb_lattice.agrid
+        node_pos = agrid * (np.stack(np.meshgrid(
+            *[np.arange(n) for n in lbf.shape], indexing='ij'), axis=-1) + 0.5)
+        dist = np.linalg.norm(node_pos - system.box_l / 2., axis=-1)
+        rho_b = 1.5 * 0.5 * (1. - np.tanh((dist - 3.) / agrid))
+        lbf[:, :, :].density = np.stack([1.5 - rho_b, rho_b], axis=-1)
+        lbf.init_two_component()
+        # run one LB step before any particle exists, so that density,
+        # phase field and velocity are nontrivial and the RNG state advances
+        system.lb = lbf
+        system.integrator.run(1)
+        system.lb = None
+        system.time = 1.5
 
     if not le_active:
         ek_solver = espressomd.electrokinetics.EKNone(lattice=lb_lattice)
@@ -415,10 +437,25 @@ if lbf_class:
     grid_3D = np.fromfunction(
         lambda i, j, k: np.cos(i * m) * np.cos(j * m) * np.cos(k * m),
         lbf.shape, dtype=float)
-    lbf[:, :, :]._population = np.einsum(
-        'abc,d->abcd', grid_3D, np.arange(1, 20))
-    lbf[:, :, :].last_applied_force = np.einsum(
-        'abc,d->abcd', grid_3D, np.arange(1, 4))
+    if 'LB.CG' in modes:
+        # populations are those of the droplet after one LB step
+        lbf[:, :, :].last_applied_force = np.einsum(
+            'abc,de->abcde', grid_3D, np.arange(1, 7).reshape((2, 3)))
+        lbf_cg_ref_population = np.copy(lbf[:, :, :]._population)
+        lbf_cg_ref_density = np.copy(lbf[:, :, :].density)
+        lbf_cg_ref_phasefield = np.copy(lbf[:, :, :].phasefield)
+        lbf_cg_ref_velocity = np.copy(lbf[:, :, :].velocity)
+        lbf_cg_ref_rng_state = lbf.rng_state
+        checkpoint.register("lbf_cg_ref_population")
+        checkpoint.register("lbf_cg_ref_density")
+        checkpoint.register("lbf_cg_ref_phasefield")
+        checkpoint.register("lbf_cg_ref_velocity")
+        checkpoint.register("lbf_cg_ref_rng_state")
+    else:
+        lbf[:, :, :]._population = np.einsum(
+            'abc,d->abcd', grid_3D, np.arange(1, 20))
+        lbf[:, :, :].last_applied_force = np.einsum(
+            'abc,d->abcd', grid_3D, np.arange(1, 4))
     # save LB checkpoint file
     lbf_cpt_path = checkpoint.root / "lb.cpt"
     lbf.save_checkpoint(str(lbf_cpt_path), lbf_cpt_mode)

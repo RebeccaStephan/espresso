@@ -188,6 +188,7 @@ template <typename FloatType, lbmpy::Arch Architecture>
 void LBWalberlaImplColorGradient<FloatType, Architecture>::set_slice_population(
     Utils::Vector3i const &lower_corner, Utils::Vector3i const &upper_corner,
     std::vector<double> const &population) {
+  m_pending_ghost_comm.set(GhostComm::PDF);
   for_each_block_in_slice(
       get_lattice(), lower_corner, upper_corner,
       [&](auto &block, auto const &bci, auto const &ci,
@@ -197,10 +198,6 @@ void LBWalberlaImplColorGradient<FloatType, Architecture>::set_slice_population(
         (void)pop_per_node;
         auto pdf_field_a = block.template getData<PdfField>(m_pdf_field_id[0]);
         auto pdf_field_b = block.template getData<PdfField>(m_pdf_field_id[1]);
-        auto force_field =
-            block.template getData<VectorField>(m_last_applied_force_field_id[0]);
-        auto vel_field =
-            block.template getData<VectorField>(m_velocity_field_id);
         std::vector<FloatType> values_a(this->stencil_size() * bci.numCells());
         std::vector<FloatType> values_b(this->stencil_size() * bci.numCells());
 
@@ -217,10 +214,9 @@ void LBWalberlaImplColorGradient<FloatType, Architecture>::set_slice_population(
         };
 
         copy_block_buffer(bci, ci, block_offset, lower_corner, kernel);
-        lbm::accessor::Population::set(pdf_field_a, vel_field, force_field,
-                                       values_a, bci);
-        lbm::accessor::Population::set(pdf_field_b, vel_field, force_field,
-                                       values_b, bci);
+        // populations only, see set_node_population()
+        lbm::accessor::Population::set(pdf_field_a, values_a, bci);
+        lbm::accessor::Population::set(pdf_field_b, values_b, bci);
       });
 }
 
@@ -260,6 +256,43 @@ LBWalberlaImplColorGradient<FloatType, Architecture>::get_slice_density(
                                                    Utils::Vector3i const &) {
           out[2u * local_index + 0u] = values_a[block_index];
           out[2u * local_index + 1u] = values_b[block_index];
+        };
+
+        copy_block_buffer(bci, ci, block_offset, lower_corner, kernel);
+      });
+  return out;
+}
+
+template <typename FloatType, lbmpy::Arch Architecture>
+std::vector<double>
+LBWalberlaImplColorGradient<FloatType, Architecture>::get_slice_phasefield(
+    Utils::Vector3i const &lower_corner,
+    Utils::Vector3i const &upper_corner) const {
+  std::vector<double> out;
+  for_each_block_in_slice(
+      get_lattice(), lower_corner, upper_corner,
+      [&](auto const &block, auto const &bci, auto const &ci,
+          auto const &block_offset) {
+        if (out.empty())
+          out.resize(ci.numCells());
+
+        auto const phasefield_field =
+            block.template getData<ScalarField>(m_phasefield_id);
+        std::vector<double> values(bci.numCells());
+        unsigned idx = 0u;
+        for (auto x = bci.xMin(); x <= bci.xMax(); ++x) {
+          for (auto y = bci.yMin(); y <= bci.yMax(); ++y) {
+            for (auto z = bci.zMin(); z <= bci.zMax(); ++z) {
+              values[idx] = double_c(phasefield_field->get(x, y, z));
+              ++idx;
+            }
+          }
+        }
+
+        auto kernel = [&values, &out](unsigned const block_index,
+                                      unsigned const local_index,
+                                      Utils::Vector3i const &) {
+          out[local_index] = values[block_index];
         };
 
         copy_block_buffer(bci, ci, block_offset, lower_corner, kernel);

@@ -220,6 +220,16 @@ load in the particles with the correct forces, and use::
 upon the first call ``integrator.run``. This causes the
 old forces to be reused and thus conserves momentum.
 
+For a two-component (color-gradient) fluid, the checkpoint file stores, per
+node, the populations and last applied forces of both components. It also
+stores the component densities, the phase field and the barycentric velocity.
+These derived fields are needed by the particle coupling before the next LB
+step. For a thermalized fluid, the file stores the RNG counter too. The
+parameters ``sigma``, ``beta`` and ``rng_state`` are restored when the fluid
+object is unpickled via :ref:`checkpointing <No generic checkpointing>`.
+A two-component checkpoint file cannot be loaded into a single-component fluid,
+and a single-component file cannot be loaded into a two-component fluid.
+
 .. _Interpolating velocities:
 
 Interpolating velocities

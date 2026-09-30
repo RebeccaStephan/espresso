@@ -49,6 +49,7 @@ is_gpu_available = espressomd.gpu_available()
 modes = config.get_modes()
 has_lb_mode = ('LB.WALBERLA' in modes and espressomd.has_features('WALBERLA')
                and ('LB.CPU' in modes or 'LB.GPU' in modes and is_gpu_available))
+has_lb_cg_mode = has_lb_mode and 'LB.CG' in modes
 has_p3m_mode = 'P3M.CPU' in modes or 'P3M.GPU' in modes and is_gpu_available
 has_thermalized_bonds = 'THERM.LB' in modes or 'THERM.LANGEVIN' in modes
 has_drude = (espressomd.has_features(['ELECTROSTATICS', 'MASS', 'ROTATION'])
@@ -111,25 +112,57 @@ class CheckpointTest(ut.TestCase):
         grid_3D = np.fromfunction(
             lambda i, j, k: np.cos(i * m) * np.cos(j * m) * np.cos(k * m),
             (nx, ny, nz), dtype=float)
+        if has_lb_cg_mode:
+            ref_pop = lbf_cg_ref_population
+            ref_laf = np.einsum(
+                'abc,de->abcde', grid_3D, np.arange(1, 7).reshape((2, 3)))
+        else:
+            ref_pop = np.einsum('abc,d->abcd', grid_3D, np.arange(1, 20))
+            ref_laf = np.einsum('abc,d->abcd', grid_3D, np.arange(1, 4))
         lb_pop = np.copy(lbf[:, :, :]._population)
         lb_laf = np.copy(lbf[:, :, :].last_applied_force)
+        self.assertEqual(lb_pop.shape, ref_pop.shape)
+        if has_lb_cg_mode:
+            self.assertEqual(lb_pop.shape, (nx, ny, nz, 38))
+        self.assertEqual(lb_laf.shape, ref_laf.shape)
         for i in range(nx):
             for j in range(ny):
                 for k in range(nz):
                     np.testing.assert_almost_equal(
-                        lb_pop[i, j, k],
-                        grid_3D[i, j, k] * np.arange(1, 20),
-                        decimal=precision)
+                        lb_pop[i, j, k], ref_pop[i, j, k], decimal=precision)
                     np.testing.assert_almost_equal(
-                        lb_laf[i, j, k],
-                        grid_3D[i, j, k] * np.arange(1, 4),
-                        decimal=precision)
+                        lb_laf[i, j, k], ref_laf[i, j, k], decimal=precision)
+        if has_lb_cg_mode:
+            # derived fields must be consistent with the restored populations
+            # and last applied forces on all nodes
+            lb_density = np.copy(lbf[:, :, :].density)
+            lb_phasefield = np.copy(lbf[:, :, :].phasefield)
+            lb_velocity = np.copy(lbf[:, :, :].velocity)
+            self.assertEqual(lb_density.shape, (nx, ny, nz, 2))
+            self.assertEqual(lb_phasefield.shape, (nx, ny, nz))
+            self.assertEqual(lb_velocity.shape, (nx, ny, nz, 3))
+            # sanity check: the reference fields are not trivial
+            self.assertGreater(np.ptp(lbf_cg_ref_phasefield), 0.1)
+            self.assertGreater(np.max(np.abs(lbf_cg_ref_velocity)), 0.)
+            np.testing.assert_almost_equal(
+                lb_density, lbf_cg_ref_density, decimal=precision)
+            np.testing.assert_almost_equal(
+                lb_phasefield, lbf_cg_ref_phasefield, decimal=precision)
+            np.testing.assert_almost_equal(
+                lb_velocity, lbf_cg_ref_velocity, decimal=precision)
         state = lbf.get_params()
         reference = {
             "agrid": 2.0,
             "kinematic_viscosity": 1.3,
             "density": 1.5,
             "tau": 0.01}
+        if has_lb_cg_mode:
+            reference["kinematic_viscosity"] = [1.3, 0.9]
+            reference["sigma"] = 0.05
+            reference["beta"] = 0.6
+            reference["kT"] = 1e-3
+            reference["seed"] = 42
+            reference["rng_state"] = lbf_cg_ref_rng_state
         for key in reference:
             self.assertIn(key, state)
             np.testing.assert_allclose(np.copy(state[key]), reference[key],
@@ -137,8 +170,9 @@ class CheckpointTest(ut.TestCase):
 
         state = lbf.lattice.get_params()
         ref_ghost_layers = 2
-        if 'INT.NPT' not in modes and 'LB.GPU' not in modes and (
-                'LB' not in modes or self.n_nodes in (1, 2, 3)):
+        if 'INT.NPT' not in modes and 'LB.GPU' not in modes and \
+                'LB.CG' not in modes and (
+                    'LB' not in modes or self.n_nodes in (1, 2, 3)):
             ref_ghost_layers = 1
         reference = {"agrid": 2.0, "n_ghost_layers": ref_ghost_layers,
                      "blocks_per_mpi_rank": [1, 1, 1]}
@@ -290,7 +324,20 @@ class CheckpointTest(ut.TestCase):
                 np.copy(ek_species[:, :, :].is_boundary), False)
 
     @utx.skipIfMissingFeatures(["WALBERLA"])
+    @ut.skipIf(not has_lb_cg_mode, "Skipping test due to missing LB CG mode.")
+    def test_lb_cg_checkpoint_into_sc_fluid(self):
+        lbf = system.lb
+        cpt_mode = 0 if 'LB.ASCII' in modes else 1
+        cpt_path = str(self.checkpoint.root / "lb.cpt")
+        lbf_sc = espressomd.lb.LBFluid(
+            lattice=lbf.lattice, kinematic_viscosity=1.3, density=1.5,
+            tau=lbf.tau)
+        with self.assertRaisesRegex(RuntimeError, 'population size mismatch, read 38, expected 19'):
+            lbf_sc.load_checkpoint(cpt_path, cpt_mode)
+
+    @utx.skipIfMissingFeatures(["WALBERLA"])
     @ut.skipIf(not has_lb_mode, "Skipping test due to missing LB mode.")
+    @ut.skipIf(has_lb_cg_mode, "VTK test uses a scalar density setter.")
     def test_lb_vtk(self):
         lbf = system.lb
         self.assertEqual(len(lbf.vtk_writers), 2)
@@ -406,6 +453,7 @@ class CheckpointTest(ut.TestCase):
     @ut.skipIf('INT.NPT' in modes, 'Lees-Edwards not compatible with NPT')
     @ut.skipIf('LB' in modes and n_nodes not in (1, 2, 3),
                'Lees-Edwards not implemented for certain decompositions')
+    @ut.skipIf('LB.CG' in modes, 'Lees-Edwards not enabled for LB CG')
     def test_lees_edwards(self):
         lebc = system.lees_edwards
         protocol = lebc.protocol
@@ -550,7 +598,8 @@ class CheckpointTest(ut.TestCase):
         self.assertEqual(thmst.seed, 23)
         self.assertEqual(thmst.philox_counter, 0)
         self.assertAlmostEqual(thmst.gamma, 2., delta=1e-10)
-        self.assertAlmostEqual(system.thermostat.kT, 0., delta=1e-10)
+        ref_kT = 1e-3 if has_lb_cg_mode else 0.
+        self.assertAlmostEqual(system.thermostat.kT, ref_kT, delta=1e-10)
 
     @ut.skipIf('THERM.LANGEVIN' not in modes,
                'Langevin thermostat not in modes')

@@ -82,6 +82,9 @@ protected:
   double m_conv_force;
   double m_conv_force_dens;
   double m_conv_energy;
+  /** Two-component interface tension (MD units) and thickness parameter. */
+  double m_sigma;
+  double m_beta;
 
 public:
   LBFluid() {
@@ -103,6 +106,8 @@ public:
          [this]() { return m_instance->get_kT() / m_conv_energy; }},
         {"seed", AutoParameter::read_only,
          [this]() { return static_cast<int>(m_instance->get_seed()); }},
+        {"sigma", AutoParameter::read_only, [this]() { return m_sigma; }},
+        {"beta", AutoParameter::read_only, [this]() { return m_beta; }},
         {"rng_state",
          [this](Variant const &v) {
            auto const rng_state = get_value<int>(v);

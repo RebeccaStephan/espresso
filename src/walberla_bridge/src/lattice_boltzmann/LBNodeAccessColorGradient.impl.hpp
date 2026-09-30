@@ -66,6 +66,36 @@ bool LBWalberlaImplColorGradient<FloatType, Architecture>::set_node_velocity(
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>
+std::optional<Utils::Vector3d>
+LBWalberlaImplColorGradient<FloatType, Architecture>::get_node_velocity_raw(
+    Utils::Vector3i const &node, bool consider_ghosts) const {
+  assert(not(consider_ghosts and m_pending_ghost_comm.test(GhostComm::VEL)));
+  auto const bc = get_block_and_cell(get_lattice(), node, consider_ghosts);
+  if (!bc)
+    return std::nullopt;
+
+  auto field = bc->block->template uncheckedFastGetData<VectorField>(
+      m_velocity_field_id);
+  return to_vector3d(lbm::accessor::Vector::get(field, bc->cell));
+}
+
+template <typename FloatType, lbmpy::Arch Architecture>
+bool LBWalberlaImplColorGradient<FloatType, Architecture>::
+    set_node_velocity_raw(Utils::Vector3i const &node,
+                          Utils::Vector3d const &v) {
+  m_pending_ghost_comm.set(GhostComm::VEL);
+  auto bc = get_block_and_cell(get_lattice(), node, false);
+  if (!bc)
+    return false;
+
+  auto vel_field =
+      bc->block->template getData<VectorField>(m_velocity_field_id);
+  lbm::accessor::Vector::set(vel_field, to_vector3<FloatType>(v), bc->cell);
+
+  return true;
+}
+
+template <typename FloatType, lbmpy::Arch Architecture>
 std::optional<std::vector<double>>
 LBWalberlaImplColorGradient<FloatType, Architecture>::get_node_density(
     Utils::Vector3i const &node, bool consider_ghosts) const {
@@ -115,6 +145,21 @@ LBWalberlaImplColorGradient<FloatType, Architecture>::get_node_phasefield(
 }
 
 template <typename FloatType, lbmpy::Arch Architecture>
+bool LBWalberlaImplColorGradient<FloatType, Architecture>::set_node_phasefield(
+    Utils::Vector3i const &node, double phasefield) {
+  m_pending_ghost_comm.set(GhostComm::PHI);
+  auto bc = get_block_and_cell(get_lattice(), node, false);
+  if (!bc)
+    return false;
+
+  auto phasefield_field =
+      bc->block->template getData<ScalarField>(m_phasefield_id);
+  phasefield_field->get(bc->cell) = FloatType_c(phasefield);
+
+  return true;
+}
+
+template <typename FloatType, lbmpy::Arch Architecture>
 std::optional<std::vector<double>>
 LBWalberlaImplColorGradient<FloatType, Architecture>::get_node_population(
     Utils::Vector3i const &node, bool consider_ghosts) const {
@@ -139,27 +184,23 @@ template <typename FloatType, lbmpy::Arch Architecture>
 bool LBWalberlaImplColorGradient<FloatType, Architecture>::set_node_population(
     Utils::Vector3i const &node, std::vector<double> const &population) {
   m_pending_ghost_comm.set(GhostComm::PDF);
-  m_pending_ghost_comm.set(GhostComm::VEL);
   auto bc = get_block_and_cell(get_lattice(), node, false);
   if (!bc)
     return false;
 
+  // Only the populations are written: the SC overload that also updates the
+  // velocity field assumes zero-centered single-component populations and
+  // would store a wrong velocity. rho, phi and u re-derive on next integrate.
   auto pdf_field_a = bc->block->template getData<PdfField>(m_pdf_field_id[0]);
   auto pdf_field_b = bc->block->template getData<PdfField>(m_pdf_field_id[1]);
-  auto force_field =
-      bc->block->template getData<VectorField>(m_last_applied_force_field_id[0]);
-  auto vel_field =
-      bc->block->template getData<VectorField>(m_velocity_field_id);
   std::array<FloatType, Stencil::Size> pop_a;
   std::array<FloatType, Stencil::Size> pop_b;
   for (uint_t f = 0u; f < Stencil::Size; ++f) {
     pop_a[f] = FloatType_c(population[f]);
     pop_b[f] = FloatType_c(population[Stencil::Size + f]);
   }
-  lbm::accessor::Population::set(pdf_field_a, vel_field, force_field, pop_a,
-                                 bc->cell);
-  lbm::accessor::Population::set(pdf_field_b, vel_field, force_field, pop_b,
-                                 bc->cell);
+  lbm::accessor::Population::set(pdf_field_a, pop_a, bc->cell);
+  lbm::accessor::Population::set(pdf_field_b, pop_b, bc->cell);
 
   return true;
 }

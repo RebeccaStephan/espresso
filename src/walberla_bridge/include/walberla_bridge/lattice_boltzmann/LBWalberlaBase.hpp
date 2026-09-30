@@ -36,6 +36,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <vector>
 
 /** @brief Interface of a lattice-based fluid model. */
@@ -187,6 +188,14 @@ public:
   virtual std::vector<double>
   get_slice_density(Utils::Vector3i const &lower_corner,
                     Utils::Vector3i const &upper_corner) const = 0;
+
+  /** @brief Get slice order parameter (two-component LB only). */
+  virtual std::vector<double>
+  get_slice_phasefield(Utils::Vector3i const & /* lower_corner */,
+                       Utils::Vector3i const & /* upper_corner */) const {
+    throw std::runtime_error(
+        "the phase field is only defined for two-component LB");
+  }
 
   /** @brief Set slice density. */
   virtual void set_slice_density(Utils::Vector3i const &lower_corner,

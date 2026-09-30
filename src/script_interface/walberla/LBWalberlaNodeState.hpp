@@ -22,20 +22,30 @@
 #include <utils/Vector.hpp>
 
 #include <boost/serialization/access.hpp>
+#include <boost/serialization/vector.hpp>
 
 #include <vector>
 
 /** Checkpoint data for a LB node. */
 struct LBWalberlaNodeState {
+  /** One stencil per component (SC: 19 values, CG: 2*19 values). */
   std::vector<double> populations;
-  Utils::Vector3d last_applied_force;
-  Utils::Vector3d slip_velocity;
-  bool is_boundary;
+  /** One force per component. */
+  std::vector<Utils::Vector3d> last_applied_force;
+  /** Two-component only: per-component densities. */
+  std::vector<double> density;
+  /** Two-component only: order parameter. */
+  double phasefield = 0.;
+  /** Two-component only: stored barycentric velocity. */
+  Utils::Vector3d velocity = {};
+  Utils::Vector3d slip_velocity = {};
+  bool is_boundary = false;
 
 private:
   friend boost::serialization::access;
   template <typename Archive>
   void serialize(Archive &ar, unsigned int /* version */) {
-    ar & populations & last_applied_force & slip_velocity & is_boundary;
+    ar & populations & last_applied_force & density & phasefield & velocity &
+        slip_velocity & is_boundary;
   }
 };

@@ -153,6 +153,9 @@ class LBFluid(ScriptInterfaceHelper, espressomd.detail.walberla.LatticeModel):
 
     save_checkpoint()
         Write LB node populations and boundary conditions to a file.
+        For a two-component fluid, both components' populations and last
+        applied forces are written, as well as the component densities,
+        the phase field, the velocity field and the RNG counter.
 
         Parameters
         ----------
@@ -608,6 +611,14 @@ class LBFluidSlice(ScriptInterfaceHelper):
     @density.setter
     def density(self, value):
         self._setter("density", value)
+
+    @property
+    def phasefield(self):
+        return self._getter("phasefield")
+
+    @phasefield.setter
+    def phasefield(self, value):
+        raise RuntimeError("Property 'phasefield' is read-only.")
 
     @property
     def _population(self):

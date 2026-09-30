@@ -61,4 +61,26 @@ public:
   virtual std::optional<double>
   get_node_phasefield(Utils::Vector3i const &node,
                       bool consider_ghosts = false) const = 0;
+
+  /** @brief Overwrite the stored order parameter (checkpointing only). */
+  virtual bool set_node_phasefield(Utils::Vector3i const &node,
+                                   double phasefield) = 0;
+
+  /**
+   * @brief Overwrite the stored barycentric velocity (checkpointing only).
+   * Unlike @ref LBWalberlaBase::set_node_velocity, the populations are not
+   * modified; this only restores the velocity field written by the stream
+   * sweep, which the particle coupling reads before the next LB step.
+   */
+  virtual bool set_node_velocity_raw(Utils::Vector3i const &node,
+                                     Utils::Vector3d const &v) = 0;
+
+  /**
+   * @brief Read the stored barycentric velocity (checkpointing only).
+   * Unlike @ref LBWalberlaBase::get_node_velocity, boundary nodes return the
+   * velocity field value instead of the boundary slip velocity.
+   */
+  virtual std::optional<Utils::Vector3d>
+  get_node_velocity_raw(Utils::Vector3i const &node,
+                        bool consider_ghosts = false) const = 0;
 };
