@@ -414,6 +414,52 @@ class ColorGradientLBTest(ut.TestCase):
         np.testing.assert_allclose(
             mom_2 - mom_1, expected_delta, rtol=1e-6, atol=1e-9)
 
+    def test_sigma_unit_conversion(self):
+        """
+        Two setups that are identical in lattice units (agrid=1, tau=1 vs.
+        agrid=0.5, tau=0.1, with all MD inputs converted accordingly) must
+        evolve identically. Surface tension is energy per area [M T^-2],
+        i.e. sigma_lb = sigma_md * tau^2, independent of agrid. The droplet
+        is curved, so the flow it develops is driven by sigma.
+        """
+        n_nodes = DOMAIN_SIZE
+        visc_lb = VISCOSITY
+        sigma_lb = 0.005
+        rho_a, rho_b = droplet_densities(
+            n_nodes, RADIUS, SMOOTHING_WIDTH, RHO_0, EPSILON)
+        rho_lb = np.stack([rho_a, rho_b], axis=-1)
+
+        def restore_system():
+            self.system.lb = None
+            self.system.box_l = [DOMAIN_SIZE] * 3
+            self.system.time_step = TAU
+        self.addCleanup(restore_system)
+
+        def run(agrid, tau):
+            self.system.lb = None
+            self.system.box_l = [n_nodes * agrid] * 3
+            self.system.time_step = tau
+            lbf = espressomd.lb.LBFluid(
+                agrid=agrid, density=RHO_0 / agrid**3, tau=tau,
+                kinematic_viscosity=[visc_lb * agrid**2 / tau] * 2,
+                sigma=sigma_lb / tau**2, beta=0.8)
+            self.system.lb = lbf
+            lbf[:, :, :].density = rho_lb / agrid**3
+            lbf.init_two_component()
+            self.system.integrator.run(20)
+            populations = np.copy(lbf[:, :, :]._population)
+            velocity_lb = np.copy(lbf[:, :, :].velocity) * tau / agrid
+            return populations, velocity_lb
+
+        pop_ref, vel_ref = run(agrid=1.0, tau=1.0)
+        pop_scaled, vel_scaled = run(agrid=0.5, tau=0.1)
+
+        vel_max = np.max(np.abs(vel_ref))
+        self.assertGreater(vel_max, 1e-7, "droplet flow should be nonzero")
+        np.testing.assert_allclose(
+            vel_scaled, vel_ref, rtol=1e-8, atol=1e-8 * vel_max)
+        np.testing.assert_allclose(pop_scaled, pop_ref, rtol=1e-10)
+
     def test_run_steps(self):
         """Two-component LB with droplet should run without crash."""
         lbf = self._create_lbf()

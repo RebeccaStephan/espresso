@@ -102,7 +102,8 @@ class LBFluid(ScriptInterfaceHelper, espressomd.detail.walberla.LatticeModel):
         Fluid kinematic viscosity. A scalar for single-component LB,
         or a tuple of two values for two-component color gradient LB.
     sigma : :obj:`float`, optional
-        Interface tension coefficient for two-component color gradient LB.
+        Interface tension coefficient for two-component color gradient LB,
+        in units of energy per area.
     beta : :obj:`float`, optional
         Interface thickness parameter for recoloring in two-component color
         gradient LB. Controls how sharp the interface is: smaller values yield

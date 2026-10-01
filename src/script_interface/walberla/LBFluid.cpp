@@ -222,6 +222,8 @@ void LBFluid::do_construct(VariantMap const &params) {
     m_conv_press = Utils::int_pow<2>(tau) * Utils::int_pow<1>(agrid);
     m_conv_force = Utils::int_pow<2>(tau) / Utils::int_pow<1>(agrid);
     m_conv_force_dens = Utils::int_pow<2>(tau) * Utils::int_pow<2>(agrid);
+    // surface tension is energy per area: [M T^-2]
+    m_conv_sigma = Utils::int_pow<2>(tau);
     auto lb_visc = visc;
     for (auto &vi : lb_visc) {
       vi *= m_conv_visc;
@@ -250,7 +252,7 @@ void LBFluid::do_construct(VariantMap const &params) {
     m_beta = get_value_or<double>(params, "beta", 0.7);
     if (m_color_gradient) {
       m_color_gradient->set_collision_model_color_gradient(
-          m_sigma * m_conv_energy, m_beta);
+          m_sigma * m_conv_sigma, m_beta);
     }
     // restore the RNG counter when deserializing a thermalized fluid;
     // must come after the collision model setup, which resets the counter

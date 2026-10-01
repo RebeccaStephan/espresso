@@ -82,6 +82,7 @@ protected:
   double m_conv_force;
   double m_conv_force_dens;
   double m_conv_energy;
+  double m_conv_sigma;
   /** Two-component interface tension (MD units) and thickness parameter. */
   double m_sigma;
   double m_beta;
