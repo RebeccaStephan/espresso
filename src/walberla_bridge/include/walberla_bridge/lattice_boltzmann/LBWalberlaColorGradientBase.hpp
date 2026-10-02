@@ -34,6 +34,23 @@
 #include <optional>
 #include <vector>
 
+/**
+ * @brief Negative component densities found on this MPI rank in one LB step,
+ * after streaming and before collision.
+ */
+struct NegativeDensityReport {
+  /** Component of the most negative density (0 = a, 1 = b). */
+  int component;
+  /** Global node of the most negative density. */
+  Utils::Vector3i node;
+  /** Most negative density, in lattice units. */
+  double density;
+  /** Number of nodes on this rank with a negative density of either component. */
+  int n_nodes;
+  /** LB step in which it was found, counted from 1. */
+  unsigned int time_step;
+};
+
 class LBWalberlaColorGradientBase : public virtual LBWalberlaBase {
 public:
   ~LBWalberlaColorGradientBase() override = default;
@@ -83,4 +100,11 @@ public:
   virtual std::optional<Utils::Vector3d>
   get_node_velocity_raw(Utils::Vector3i const &node,
                         bool consider_ghosts = false) const = 0;
+
+  /**
+   * @brief Negative component densities found in the most recent LB step on
+   * this MPI rank, or @c std::nullopt if there were none.
+   */
+  [[nodiscard]] virtual std::optional<NegativeDensityReport>
+  get_negative_density_report() const = 0;
 };

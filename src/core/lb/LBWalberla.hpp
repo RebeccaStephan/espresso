@@ -115,9 +115,17 @@ struct LBWalberla : public System::Leaf<LBWalberla> {
                               unsigned int seed);
 
 private:
+  /// Turn the CG negative density report of the last LB step into a runtime
+  /// error (kT > 0) or warning (kT = 0).
+  void report_negative_densities();
+
   /// Non-owning pointer to lb_fluid cast as CG base; nullptr iff
   /// single-component.
   LBWalberlaColorGradientBase *m_color_gradient = nullptr;
+  /// Whether the kT = 0 negative density warning was already issued during
+  /// this integration. Reset in the (const) @ref sanity_checks, which runs at
+  /// the start of every integration, hence mutable.
+  mutable bool m_negative_density_warned = false;
 };
 
 } // namespace LB

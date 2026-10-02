@@ -37,8 +37,14 @@ Tests:
   - Mass conservation (total rho_a and rho_b are conserved)
   - ext_force_density is split between components density-weighted, and
     grows total system momentum at the expected rate
+  - A negative component density after streaming stops a thermalized
+    integration with an error naming the node
+  - A negative component density at kT = 0 gives one warning per
+    integrator.run() call and the integration continues
 """
 
+import contextlib
+import io
 import unittest as ut
 import unittest_decorators as utx
 import numpy as np
@@ -327,21 +333,25 @@ class ColorGradientLBTest(ut.TestCase):
     def test_thermalized_cg_accepted(self):
         """kT > 0 is accepted for two-component mode and thermalizes it.
 
-        Only checks that the parameters arrive and that the RNG counter is
-        live -- whether the noise satisfies fluctuation-dissipation is a
-        separate question.
+        Only checks that the parameters arrive, that the RNG counter is
+        live and that the fluid stays finite -- whether the noise satisfies
+        fluctuation-dissipation is a separate question.
         """
         lbf = espressomd.lb.LBFluid(
             agrid=AGRID, density=RHO_0, tau=self.system.time_step,
             kinematic_viscosity=[VISCOSITY, VISCOSITY],
-            kT=1.0, seed=42)
+            kT=1e-4, seed=42)
         self.system.lb = lbf
-        self.assertAlmostEqual(lbf.kT, 1.0, delta=1e-10)
+        lbf[:, :, :].density = np.broadcast_to(
+            [0.5 * RHO_0, 0.5 * RHO_0], (DOMAIN_SIZE,) * 3 + (2,))
+        lbf.init_two_component()
+        self.assertAlmostEqual(lbf.kT, 1e-4, delta=1e-10)
         self.assertEqual(lbf.seed, 42)
         # the RNG counter is exposed once thermalized, and advances per step
         self.assertEqual(lbf.rng_state, 0)
         self.system.integrator.run(2)
         self.assertEqual(lbf.rng_state, 2)
+        self.assertTrue(np.all(np.isfinite(np.copy(lbf[:, :, :]._population))))
 
     def test_unthermalized_cg_has_no_rng_state(self):
         """kT == 0 keeps the two-component model unthermalized."""
@@ -491,6 +501,65 @@ class ColorGradientLBTest(ut.TestCase):
                                msg="rho_a not conserved")
         self.assertAlmostEqual(rho_b_init, rho_b_final, places=8,
                                msg="rho_b not conserved")
+
+    def _init_negative_density_node(self, lbf, node):
+        """
+        Uniform bulk with a trace of component a, and a negative density of
+        component a at ``node``. The first stream spreads it to ``node`` and
+        its 18 neighbours, with ``node`` the most negative one.
+        """
+        N = int(DOMAIN_SIZE / AGRID)
+        densities = np.zeros((N, N, N, 2))
+        densities[..., 0] = EPSILON * RHO_0
+        densities[..., 1] = RHO_0
+        densities[node + (0,)] = -0.1 * RHO_0
+        lbf[:, :, :].density = densities
+        lbf.init_two_component()
+
+    def test_negative_density_raises_with_kT(self):
+        """
+        With kT > 0, a negative component density after streaming makes the
+        noise amplitude sqrt(kT * rho) undefined. The integration must stop
+        with an error naming the node, instead of turning the fluid into NaN.
+        """
+        lbf = espressomd.lb.LBFluid(
+            agrid=AGRID, density=RHO_0, tau=self.system.time_step,
+            kinematic_viscosity=[VISCOSITY, VISCOSITY], kT=1e-4, seed=42)
+        self.system.lb = lbf
+        node = (5, 6, 7)
+        self._init_negative_density_node(lbf, node)
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaisesRegex(
+                    Exception,
+                    r"ERROR: Color-gradient LB: the populations of component "
+                    r"a \(index 0\) sum to a negative density "
+                    r"\(rho = -0\.0333\d*\) at node \[5, 6, 7\] in LB step 1 "
+                    r"\(19 nodes affected on this MPI rank\)\. "
+                    r"Negative densities are not physical\."):
+                self.system.integrator.run(1)
+        # the negative density stays in place for inspection
+        self.assertLess(lbf[node].density[0], 0.)
+
+    def test_negative_density_warns_without_kT(self):
+        """
+        With kT = 0, a negative component density is still unphysical, but
+        it does not produce NaN. The integration continues with a warning,
+        reported once per integrator.run() call.
+        """
+        lbf = self._create_lbf()
+        node = (5, 6, 7)
+        warning = ("WARNING: Color-gradient LB: the populations of "
+                   "component a (index 0) sum to a negative density")
+        for _ in range(2):
+            self._init_negative_density_node(lbf, node)
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                self.system.integrator.run(5)
+            self.assertEqual(stderr.getvalue().count(warning), 1)
+            self.assertIn("Negative densities are not physical.",
+                          stderr.getvalue())
+            self.assertTrue(np.all(np.isfinite(
+                np.copy(lbf[:, :, :]._population))))
 
 
 if __name__ == "__main__":

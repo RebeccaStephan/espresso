@@ -40,6 +40,7 @@
 
 #include <functional>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
 #include <variant>
@@ -62,7 +63,49 @@ Utils::VectorXd<9> LBWalberla::get_pressure_tensor() const {
   return lb_fluid->get_pressure_tensor();
 }
 
-void LBWalberla::propagate() { lb_fluid->integrate(); }
+void LBWalberla::propagate() {
+  lb_fluid->integrate();
+  if (m_color_gradient) {
+    report_negative_densities();
+  }
+}
+
+void LBWalberla::report_negative_densities() {
+  auto const report = m_color_gradient->get_negative_density_report();
+  if (not report) {
+    return;
+  }
+  auto const thermalized = lb_fluid->get_kT() > 0.;
+  if (not thermalized and m_negative_density_warned) {
+    return;
+  }
+  auto const &node = report->node;
+  std::ostringstream msg;
+  msg << "Color-gradient LB: the populations of component "
+      << (report->component == 0 ? "a" : "b") << " (index "
+      << report->component << ") sum to a negative density (rho = "
+      << report->density / Utils::int_pow<3>(lb_params->get_agrid())
+      << ") at node [" << node[0] << ", " << node[1] << ", " << node[2]
+      << "] in LB step " << report->time_step << " (" << report->n_nodes
+      << (report->n_nodes == 1 ? " node" : " nodes")
+      << " affected on this MPI rank). Negative densities are not physical.";
+  if (thermalized) {
+    runtimeErrorMsg()
+        << msg.str()
+        << " With kT > 0 the thermal noise amplitude ~ sqrt(kT * rho) is "
+           "undefined and the fluid would turn into NaN, so the simulation "
+           "was stopped. This happens when the recoloring margin 1 - beta is "
+           "small compared with the thermal noise; reduce beta (e.g. "
+           "beta <= 0.9), kT or tau.";
+  } else {
+    m_negative_density_warned = true;
+    runtimeWarningMsg()
+        << msg.str()
+        << " With kT = 0 the simulation continues, but results near this "
+           "node are unreliable. Further occurrences during this integration "
+           "are not reported.";
+  }
+}
 
 void LBWalberla::ghost_communication() { lb_fluid->ghost_communication(); }
 
@@ -157,6 +200,8 @@ void LBWalberla::sanity_checks(System::System const &system) const {
   // LB time step and MD time step must agree
   walberla_tau_sanity_checks("LB", lb_params->get_tau(),
                              system.get_time_step());
+  // a new integration starts: warn again about negative densities at kT = 0
+  m_negative_density_warned = false;
 }
 
 void LBWalberla::on_lees_edwards_change() { update_collision_model(); }

@@ -188,6 +188,9 @@ protected:
   /// integrate_reset_force_two_component(). Separate from m_reset_force,
   /// which is kept only as an unused stub for CRTP base-class compilation.
   Vector3<FloatType> m_ext_force{FloatType{0}, FloatType{0}, FloatType{0}};
+  /// Negative component densities found in the most recent LB step,
+  /// see check_component_densities().
+  std::optional<NegativeDensityReport> m_negative_density_report;
 
   // Block data access handles (PDF / two-component / temporaries)
   std::array<BlockDataID, 2> m_pdf_field_id;
@@ -320,6 +323,8 @@ private:
 
     // CG stream
     integrate_stream_two_component(blocks);
+    // Record negative component densities before the collision reads them
+    check_component_densities(blocks);
     // Sync phasefield
     m_phasefield_communicator->communicate();
     // CG collision
@@ -353,6 +358,54 @@ private:
   integrate_stream_two_component(std::shared_ptr<BlockStorage> const &blocks) {
     for (auto &block : *blocks)
       (*m_stream_model_two_component)(&block);
+  }
+
+  /**
+   * @brief Record the negative component densities written by the stream
+   * sweep, i.e. the values the collision is about to read.
+   * With kT > 0, the collision's noise amplitude sqrt(kT * rho) is NaN for
+   * them. The densities are only recorded here, and core reports them after
+   * the step (see LB::LBWalberla::propagate()): throwing here would skip this
+   * rank's PDF communication while the other ranks wait for it.
+   */
+  void check_component_densities(std::shared_ptr<BlockStorage> const &blocks) {
+    m_negative_density_report.reset();
+    auto const time_step = m_collision_model_two_component->getTime_step() + 1u;
+    for (auto &block : *blocks) {
+      auto const rho_a_field =
+          block.template getData<ScalarField>(m_rho_field_id[0]);
+      auto const rho_b_field =
+          block.template getData<ScalarField>(m_rho_field_id[1]);
+      auto const offset = get_lattice().get_block_corner(block, true);
+      auto const ci = rho_a_field->xyzSize();
+      for (auto x = ci.xMin(); x <= ci.xMax(); ++x) {
+        for (auto y = ci.yMin(); y <= ci.yMax(); ++y) {
+          for (auto z = ci.zMin(); z <= ci.zMax(); ++z) {
+            Cell const cell(x, y, z);
+            std::array<FloatType, 2> const rho{rho_a_field->get(cell),
+                                               rho_b_field->get(cell)};
+            if (not(rho[0] < FloatType{0} or rho[1] < FloatType{0})) {
+              continue;
+            }
+            auto const component = (rho[1] < rho[0]) ? 1 : 0;
+            auto const density = double_c(rho[component]);
+            if (not m_negative_density_report) {
+              m_negative_density_report =
+                  NegativeDensityReport{component, {}, density, 0, time_step};
+            }
+            auto &report = *m_negative_density_report;
+            ++report.n_nodes;
+            if (density <= report.density) {
+              report.component = component;
+              report.density = density;
+              report.node = offset + Utils::Vector3i{{static_cast<int>(x),
+                                                      static_cast<int>(y),
+                                                      static_cast<int>(z)}};
+            }
+          }
+        }
+      }
+    }
   }
 
   void integrate_reset_force_two_component(
@@ -817,6 +870,11 @@ public:
 
   [[nodiscard]] double get_kT() const noexcept override {
     return static_cast<double>(m_kT);
+  }
+
+  [[nodiscard]] std::optional<NegativeDensityReport>
+  get_negative_density_report() const override {
+    return m_negative_density_report;
   }
 
   // ---- External force: split density-weighted between components in
