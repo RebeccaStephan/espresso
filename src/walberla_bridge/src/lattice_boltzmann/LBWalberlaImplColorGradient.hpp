@@ -202,6 +202,8 @@ protected:
   std::array<BlockDataID, 2> m_force_to_be_applied_id;
 
   // Color gradient fields
+  /// Ghost layers of the density fields, read by the solvation coupling.
+  static constexpr uint_t rho_ghost_layers = 2u;
   std::array<BlockDataID, 2> m_rho_field_id;
   BlockDataID m_phasefield_id;
 
@@ -256,8 +258,12 @@ public:
         this->template add_to_storage<_VectorField>("velocity");
     
     m_pdf_field_id[1] = this->template add_to_storage<_PdfField>("pdfs_b");
-    m_rho_field_id[0] = this->template add_to_storage<_ScalarField>("rho_a");
-    m_rho_field_id[1] = this->template add_to_storage<_ScalarField>("rho_b");
+    // the order-3 solvation stencil of a particle image in the halo reaches
+    // two cells beyond the block, see make_solvation_particle_force_kernel()
+    m_rho_field_id[0] = this->template add_to_storage<_ScalarField>(
+        "rho_a", rho_ghost_layers);
+    m_rho_field_id[1] = this->template add_to_storage<_ScalarField>(
+        "rho_b", rho_ghost_layers);
     m_phasefield_id =
         this->template add_to_storage<_ScalarField>("phasefield");
     

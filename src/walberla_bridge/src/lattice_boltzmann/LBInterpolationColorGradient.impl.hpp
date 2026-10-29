@@ -157,7 +157,8 @@ void LBWalberlaImplColorGradient<FloatType, Architecture>::
     auto const [local, inside] = detail::block_local_positions(lattice, pos);
     auto const values = lbm::color_gradient::interpolate_densities_and_gradients(
         block.template getData<ScalarField>(m_rho_field_id[0]),
-        block.template getData<ScalarField>(m_rho_field_id[1]), local, gl);
+        block.template getData<ScalarField>(m_rho_field_id[1]), local,
+        rho_ghost_layers);
     std::vector<FloatType> positions, forces_a, forces_b;
     for (std::size_t i = 0ul; i < pos.size(); ++i) {
       auto const *const v = values.data() + 8u * i;
@@ -213,7 +214,7 @@ auto LBWalberlaImplColorGradient<
     Utils::Interpolation::bspline_3d_gradient<3>( // SOLVATION_BSPLINE_ORDER
         pos,
         [&](std::array<int, 3> const node, Utils::Vector3d const &grad_weight) {
-          auto block = get_block_extended(lattice, node, 1u);
+          auto block = get_block_extended(lattice, node, rho_ghost_layers);
           if (!block)
             return;
           auto cell = to_cell(node);
@@ -238,7 +239,7 @@ auto LBWalberlaImplColorGradient<
     Utils::Interpolation::bspline_3d<3>( // SOLVATION_BSPLINE_ORDER
         pos,
         [&](std::array<int, 3> const node, double weight) {
-          auto block = get_block_extended(lattice, node, 1u);
+          auto block = get_block_extended(lattice, node, rho_ghost_layers);
           if (!block)
             return;
           auto cell = to_cell(node);
@@ -374,7 +375,7 @@ auto LBWalberlaImplColorGradient<FloatType, Architecture>::
     Utils::Interpolation::bspline_3d_gradient<3>( // SOLVATION_BSPLINE_ORDER
         pos,
         [&](std::array<int, 3> const node, Utils::Vector3d const &grad_weight) {
-          auto block = get_block_extended(lattice, node, 1u);
+          auto block = get_block_extended(lattice, node, rho_ghost_layers);
           if (!block)
             return;
           auto cell = to_cell(node);
@@ -391,7 +392,7 @@ auto LBWalberlaImplColorGradient<FloatType, Architecture>::
     Utils::Interpolation::bspline_3d<3>( // SOLVATION_BSPLINE_ORDER
         pos,
         [&](std::array<int, 3> const node, double weight) {
-          auto block = get_block_extended(lattice, node, 1u);
+          auto block = get_block_extended(lattice, node, rho_ghost_layers);
           if (!block)
             return;
           auto cell = to_cell(node);
@@ -436,7 +437,7 @@ LBWalberlaImplColorGradient<FloatType, Architecture>::
     auto const values = lbm::color_gradient::interpolate_densities_and_gradients(
         block.template getData<ScalarField>(m_rho_field_id[0]),
         block.template getData<ScalarField>(m_rho_field_id[1]), local,
-        lattice.get_ghost_layers());
+        rho_ghost_layers);
     for (std::size_t i = 0ul; i < pos.size(); ++i) {
       auto const *const v = values.data() + 8u * i;
       auto const rho_a = v[0];

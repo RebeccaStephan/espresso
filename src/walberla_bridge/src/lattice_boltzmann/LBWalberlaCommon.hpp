@@ -814,9 +814,12 @@ protected:
    * will fall back to @c StdFieldAlloc, yet @c AllocateAligned is needed
    * for intrinsics to work.
    */
-  template <typename Field> auto add_to_storage(std::string const tag) {
+  template <typename Field>
+  auto add_to_storage(std::string const tag,
+                      std::optional<uint_t> ghost_layers = std::nullopt) {
     auto const &blocks = m_lattice->get_blocks();
-    auto const n_ghost_layers = m_lattice->get_ghost_layers();
+    auto const n_ghost_layers =
+        ghost_layers.value_or(m_lattice->get_ghost_layers());
     if constexpr (Architecture == lbmpy::Arch::CPU) {
 #ifdef ESPRESSO_BUILD_WITH_AVX_KERNELS
       constexpr auto alignment = field::SIMDAlignment();

@@ -125,6 +125,9 @@ serialize_and_reduce(Archive &ar, Particle &p, unsigned int data_parts,
 #ifdef ESPRESSO_ENGINE
     ar & p.swimming();
 #endif
+#ifdef ESPRESSO_WALBERLA
+    ar & p.solvation_delta_mu();
+#endif
   }
   if (data_parts & GHOSTTRANS_POSITION) {
     if (direction == SerializationDirection::SAVE and ghost_shift != nullptr) {

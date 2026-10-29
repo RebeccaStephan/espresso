@@ -302,6 +302,7 @@ void ParticleCoupling::kernel(std::vector<Particle *> const &particles) {
     Utils::Vector3d force_on_particle = {};
 #ifdef ESPRESSO_WALBERLA
     Utils::Vector3d solvation_force_on_particle = {};
+    auto couple_solvation = false;
 #endif
     if (coupling_mode == particle_force) {
 #ifndef ESPRESSO_THERMOSTAT_PER_PARTICLE
@@ -324,8 +325,7 @@ void ParticleCoupling::kernel(std::vector<Particle *> const &particles) {
 #ifdef ESPRESSO_WALBERLA
         if (color_gradient_lb && p.solvation_delta_mu() != 0.) {
           solvation_force_on_particle = *it_solvation_particle_forces;
-          solvation_positions.emplace_back(*it_positions_velocity_coupling);
-          solvation_delta_mus.emplace_back(p.solvation_delta_mu());
+          couple_solvation = true;
         }
 #endif
       }
@@ -350,13 +350,21 @@ void ParticleCoupling::kernel(std::vector<Particle *> const &particles) {
         /* Particle is in our LB volume, so this node
          * is responsible to adding its force */
 #ifdef ESPRESSO_WALBERLA
-        if (color_gradient_lb && p.solvation_delta_mu() != 0.) {
+        if (couple_solvation) {
           p.force() += solvation_force_on_particle;
         }
 #endif
         p.force() += force_on_particle;
       }
       force_coupling_forces.emplace_back(force_on_fluid);
+#ifdef ESPRESSO_WALBERLA
+      // like the friction force, the reaction is spread from every image
+      // in the halo, and each rank keeps the share in its own cells
+      if (couple_solvation) {
+        solvation_positions.emplace_back(pos);
+        solvation_delta_mus.emplace_back(p.solvation_delta_mu());
+      }
+#endif
       ++it_positions_force_coupling;
     }
   }
