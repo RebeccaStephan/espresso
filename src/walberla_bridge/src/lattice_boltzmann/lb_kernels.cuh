@@ -49,6 +49,8 @@
 #include "generated_kernels/ColorGradientCollideSweepSinglePrecisionCUDA.h"
 #include "generated_kernels/ColorGradientStreamSweepDoublePrecisionCUDA.h"
 #include "generated_kernels/ColorGradientStreamSweepSinglePrecisionCUDA.h"
+#include "generated_kernels/ColorGradientUpdateMacroscopicFromPDFDoublePrecisionCUDA.h"
+#include "generated_kernels/ColorGradientUpdateMacroscopicFromPDFSinglePrecisionCUDA.h"
 
 namespace walberla {
 namespace detail {
@@ -65,6 +67,7 @@ template <> struct KernelTrait<double, lbmpy::Arch::GPU> {
   using InitialPDFsSetterTwoComponent = pystencils::ColorGradientInitialPDFsSetterDoublePrecisionCUDA;
   using StreamModelTwoComponent = pystencils::ColorGradientStreamSweepDoublePrecisionCUDA;
   using CollisionModelTwoComponent = pystencils::ColorGradientCollideSweepDoublePrecisionCUDA;
+  using UpdateMacroscopicFromPDFTwoComponent = pystencils::ColorGradientUpdateMacroscopicFromPDFDoublePrecisionCUDA;
   using DynamicUBB = lbm::DynamicUBBDoublePrecisionCUDA;
   using DynamicUBBTwoComponent = lbm::DynamicUBBColorGradientDoublePrecisionCUDA;
 };
@@ -81,6 +84,7 @@ template <> struct KernelTrait<float, lbmpy::Arch::GPU> {
   using InitialPDFsSetterTwoComponent = pystencils::ColorGradientInitialPDFsSetterSinglePrecisionCUDA;
   using StreamModelTwoComponent = pystencils::ColorGradientStreamSweepSinglePrecisionCUDA;
   using CollisionModelTwoComponent = pystencils::ColorGradientCollideSweepSinglePrecisionCUDA;
+  using UpdateMacroscopicFromPDFTwoComponent = pystencils::ColorGradientUpdateMacroscopicFromPDFSinglePrecisionCUDA;
   using DynamicUBB = lbm::DynamicUBBSinglePrecisionCUDA;
   using DynamicUBBTwoComponent = lbm::DynamicUBBColorGradientSinglePrecisionCUDA;
 };

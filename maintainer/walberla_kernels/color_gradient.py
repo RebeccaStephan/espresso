@@ -794,3 +794,58 @@ def create_stream_operator(fields, methods, configs, opts):
         main_assignments=main_assignments,
     )
     return stream
+def create_macroscopic_update_operator(fields, methods, configs):
+    """Macroscopic fields handed to the MD coupling after an LB step.
+
+    Like ``UpdateVelFromPDF`` of the single-component LB, this reads the
+    post-collision populations pulled from the neighbors (i.e. the
+    populations of the next pre-collision state) and adds half of the
+    force applied in this step: u = (j_a + j_b + (F_a + F_b) / 2) / rho.
+    The velocity written by the stream kernel is the equilibrium input of
+    the collision and lacks the momentum the collision adds. The component
+    densities and the phase field are taken from the same populations, so
+    that all macroscopic fields describe the same state.
+    """
+    stencil = methods[0].stencil
+    density_symbol = sp.Symbol("rho")
+    momentum_symbols = sp.symbols(f"j_:{stencil.D}")
+
+    components = []
+    for method, config, pdfs, suffix in zip(
+            methods, configs, (fields["pdfs_a"], fields["pdfs_b"]), "ab"):
+        pdfs_pulled = lbmpy.macroscopic_value_kernels.get_field_accesses(
+            lb_method=method,
+            pdfs=pdfs,
+            streaming_pattern=config.streaming_pattern,
+            previous_timestep=config.timestep,
+            pre_collision_pdfs=True,
+        )
+        output = method.conserved_quantity_computation.output_equations_from_pdfs(
+            pdfs_pulled,
+            {"density": density_symbol, "momentum_density": momentum_symbols},
+        )
+        output = append_to_all_non_field_symbols(output, suffix)
+        components.append(move_main_assignment_to_subexpressions(
+            output, [sp.Symbol(f"{s.name}_{suffix}")
+                     for s in (density_symbol, *momentum_symbols)]))
+
+    update = components[0].new_merged(components[1])
+    subexpressions = update.subexpressions_dict
+    rho_total_inv = sp.Symbol("rho_total_inv")
+    subexpressions[rho_total_inv] = 1 / (
+        sp.Symbol(f"{density_symbol.name}_a")
+        + sp.Symbol(f"{density_symbol.name}_b"))
+    main_assignments = {
+        vel: rho_total_inv * (sp.Symbol(f"{j.name}_a") + sp.Symbol(f"{j.name}_b"))
+        for vel, j in zip(fields["velocity"].center_vector, momentum_symbols)
+    }
+    density_symbols = [sp.Symbol(f"{density_symbol.name}_{suffix}")
+                       for suffix in "ab"]
+    main_assignments[fields["rho_a"].center] = density_symbols[0]
+    main_assignments[fields["rho_b"].center] = density_symbols[1]
+    main_assignments[fields["phasefield"].center] = (
+        density_symbols[0] - density_symbols[1]) * rho_total_inv
+    return ps.AssignmentCollection(
+        subexpressions=subexpressions,
+        main_assignments=main_assignments,
+    )

@@ -107,6 +107,14 @@ class ColorGradientParticleCouplingTest:
         self.system.lb = lbf
         return lbf
 
+    def _solvation_force(self, lbf, p):
+        """Run one step and return the force on the resting particle ``p``
+        without the friction with the fluid, which already moves at the
+        interface after the first LB step."""
+        friction = GAMMA * np.copy(lbf.get_interpolated_velocity(pos=p.pos))
+        self.system.integrator.run(1)
+        return np.copy(p.f) - friction
+
     def _init_droplet(self, lbf):
         """Set densities to a spherical droplet profile and initialize the PDFs."""
         rho_a, rho_b = droplet_densities(
@@ -247,8 +255,7 @@ class ColorGradientParticleCouplingTest:
         p1 = self.system.part.add(pos=pos_interface, v=[0, 0, 0],
                                   solvation_delta_mu=1.0)
         self.system.thermostat.set_lb(LB_fluid=lbf, gamma=GAMMA, seed=42)
-        self.system.integrator.run(1)
-        force_pos = np.copy(p1.f)
+        force_pos = self._solvation_force(lbf, p1)
         
         # Reset
         self.system.part.clear()
@@ -265,8 +272,7 @@ class ColorGradientParticleCouplingTest:
         p2 = self.system.part.add(pos=pos_interface, v=[0, 0, 0],
                                   solvation_delta_mu=-1.0)
         self.system.thermostat.set_lb(LB_fluid=lbf, gamma=GAMMA, seed=42)
-        self.system.integrator.run(1)
-        force_neg = np.copy(p2.f)
+        force_neg = self._solvation_force(lbf, p2)
 
         # Forces should be opposite
         np.testing.assert_allclose(
@@ -286,10 +292,10 @@ class ColorGradientParticleCouplingTest:
         p = self.system.part.add(pos=pos_interface, v=[0, 0, 0],
                                  solvation_delta_mu=0.0)
         self.system.thermostat.set_lb(LB_fluid=lbf, gamma=GAMMA, seed=42)
-        self.system.integrator.run(1)
 
         np.testing.assert_allclose(
-            np.copy(p.f), [0, 0, 0], atol=self.tol(1e-10, 1e-7),
+            self._solvation_force(lbf, p), [0, 0, 0],
+            atol=self.tol(1e-10, 1e-7),
             err_msg="Force should be zero when delta_mu=0")
 
     def test_solvation_momentum_conservation(self):
@@ -315,10 +321,14 @@ class ColorGradientParticleCouplingTest:
             densities = np.copy(lbf[:, :, :].density)
             velocities = np.copy(lbf[:, :, :].velocity)
             rho_total = densities[:, :, :, 0] + densities[:, :, :, 1]
+            # the post-collision velocity contains the last applied force
+            # once more than the momentum conserved with the particle
+            forces = np.copy(lbf[:, :, :].last_applied_force).sum(axis=-2)
             # density is mass/volume in MD units; multiply by cell volume to get
             # mass per cell so units match the MD particle momentum
             fluid_momentum = np.sum(
-                rho_total[:, :, :, np.newaxis] * velocities * AGRID**3, axis=(0, 1, 2))
+                (rho_total[:, :, :, np.newaxis] * velocities - TAU * forces)
+                * AGRID**3, axis=(0, 1, 2))
             total_momentum.append(particle_momentum + fluid_momentum)
 
             if i > 0:

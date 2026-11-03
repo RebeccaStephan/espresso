@@ -588,8 +588,11 @@ class ColorGradientLBTest:
                     r"\(19 nodes affected on this MPI rank\)\. "
                     r"Negative densities are not physical\."):
                 self.system.integrator.run(1)
-        # the negative density stays in place for inspection
-        self.assertLess(lbf[node].density[0], 0.)
+        # the step is completed before the error is reported: the collision
+        # turns the populations of the node into NaN, so that the density
+        # recomputed from them after the step is NaN instead of the negative
+        # density reported above
+        self.assertFalse(lbf[node].density[0] >= 0.)
 
     def test_negative_density_warns_without_kT(self):
         """

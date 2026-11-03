@@ -131,6 +131,8 @@ protected:
   using CollisionModelTwoComponent =
       typename Kernels::CollisionModelTwoComponent;
   using StreamModelTwoComponent = typename Kernels::StreamModelTwoComponent;
+  using UpdateMacroscopicFromPDFTwoComponent =
+      typename Kernels::UpdateMacroscopicFromPDFTwoComponent;
 public:
   using typename Base::FlagField;
   using typename Base::PdfField;
@@ -226,7 +228,9 @@ protected:
   // color gradient sweeps
   std::shared_ptr<CollisionModelTwoComponent> m_collision_model_two_component;
   std::shared_ptr<StreamModelTwoComponent> m_stream_model_two_component;
-  
+  std::shared_ptr<UpdateMacroscopicFromPDFTwoComponent>
+      m_update_macroscopic_from_pdf_two_component;
+
 #if defined(__CUDACC__) and defined(WALBERLA_BUILD_WITH_CUDA)
   std::shared_ptr<gpu::HostFieldAllocator<FloatType>> m_host_field_allocator;
 #endif
@@ -279,6 +283,12 @@ public:
       pdf_setter(&block);
     }
 
+    m_update_macroscopic_from_pdf_two_component =
+        std::make_shared<UpdateMacroscopicFromPDFTwoComponent>(
+            m_last_applied_force_field_id[0], m_last_applied_force_field_id[1],
+            m_pdf_field_id[0], m_pdf_field_id[1], m_phasefield_id,
+            m_rho_field_id[0], m_rho_field_id[1], m_velocity_field_id);
+
     // Initialize and register flag field (fluid/boundary)
     m_flag_field_id = field::addFlagFieldToStorage<FlagField>(
         blocks, "flag field", n_ghost_layers);
@@ -317,7 +327,16 @@ private:
    * @brief One LB time step using the color-gradient pull scheme.
    * Sequence: reset/swap component forces, stream two-component, sync
    * phasefield, collide two-component, sync PDFs and last-applied-force,
-   * handle boundaries (both components).
+   * handle boundaries (both components), update the macroscopic fields from
+   * the PDFs.
+   *
+   * The velocity written by the stream sweep is the equilibrium input of
+   * the collision and lacks the momentum the collision adds. As in the
+   * single-component LB, the velocity handed to the MD coupling is instead
+   * computed from the post-collision populations pulled from the neighbors,
+   * plus half of the force applied in this step. The component densities
+   * and the phase field are recomputed from the same populations, so that
+   * all macroscopic fields read by the coupling describe the same state.
    */
   void integrate_pull_scheme() {
     assert(m_mpi_cart_comm_observer.is_valid());
@@ -336,11 +355,12 @@ private:
     m_phasefield_communicator->communicate();
     // CG collision
     integrate_collide_two_component(blocks);
-    // Mark pending ghost layer updates: rho and velocity are recomputed
-    // locally by collide, so their halo copies go stale; laf's halo is only
-    // partially (D3Q19) refreshed by the streaming communicator below, so it
-    // still needs a full (D3Q27) resync on the next laf-consuming read
+    // Mark pending ghost layer updates: rho, phasefield and velocity are
+    // recomputed locally below, so their halo copies go stale; laf's halo is
+    // only partially (D3Q19) refreshed by the streaming communicator below,
+    // so it still needs a full (D3Q27) resync on the next laf-consuming read
     m_pending_ghost_comm.set(GhostComm::RHO);
+    m_pending_ghost_comm.set(GhostComm::PHI);
     m_pending_ghost_comm.set(GhostComm::VEL);
     m_pending_ghost_comm.set(GhostComm::LAF);
     m_pdf_streaming_communicator->communicate();
@@ -349,6 +369,14 @@ private:
     if (m_has_boundaries) {
       integrate_boundaries(blocks);
     }
+    // Update densities, phasefield and velocities from pdfs
+    integrate_update_macroscopic_from_pdf(blocks);
+  }
+
+  void integrate_update_macroscopic_from_pdf(
+      std::shared_ptr<BlockStorage> const &blocks) {
+    for (auto &block : *blocks)
+      (*m_update_macroscopic_from_pdf_two_component)(&block);
   }
 
   void

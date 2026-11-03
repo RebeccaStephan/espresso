@@ -122,9 +122,17 @@ class ColorGradientSolvationMomentumTest:
 
     @staticmethod
     def total_momentum(lbf, p):
+        """Particle momentum plus fluid momentum. Like in the
+        single-component LB, the fluid velocity is computed after the
+        collision and includes half of the last applied force as an
+        estimate of the force of the next step, i.e. the force of the last
+        step is contained one and a half times. The fluid momentum that the
+        velocity Verlet particle update conserves contains it half, so that
+        the last applied force is removed here."""
         density = np.copy(lbf[:, :, :].density).sum(axis=-1)
         velocity = np.copy(lbf[:, :, :].velocity)
-        fluid = np.sum(density[..., np.newaxis] * velocity,
+        force = np.copy(lbf[:, :, :].last_applied_force).sum(axis=-2)
+        fluid = np.sum(density[..., np.newaxis] * velocity - TAU * force,
                        axis=(0, 1, 2)) * AGRID**3
         return fluid + p.mass * np.copy(p.v)
 

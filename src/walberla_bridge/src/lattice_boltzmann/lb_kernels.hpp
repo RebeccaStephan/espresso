@@ -37,6 +37,8 @@
 #include "generated_kernels/UpdateVelFromPDFSinglePrecision.h"
 #include "generated_kernels/ColorGradientInitialPDFsSetterDoublePrecision.h"
 #include "generated_kernels/ColorGradientInitialPDFsSetterSinglePrecision.h"
+#include "generated_kernels/ColorGradientUpdateMacroscopicFromPDFDoublePrecision.h"
+#include "generated_kernels/ColorGradientUpdateMacroscopicFromPDFSinglePrecision.h"
 
 #ifdef __AVX2__
 #include "generated_kernels/StreamCollideSweepLeesEdwardsDoublePrecisionAVX.h"
@@ -87,6 +89,7 @@ struct KernelTrait {
   using PackInfoPdf = pystencils::PackInfoPdfDoublePrecision;
   using PackInfoVec = pystencils::PackInfoVecDoublePrecision;
   using InitialPDFsSetterTwoComponent = pystencils::ColorGradientInitialPDFsSetterDoublePrecision;
+  using UpdateMacroscopicFromPDFTwoComponent = pystencils::ColorGradientUpdateMacroscopicFromPDFDoublePrecision;
   using DynamicUBB = lbm::DynamicUBBDoublePrecision;
   using DynamicUBBTwoComponent = lbm::DynamicUBBColorGradientDoublePrecision;
 };
@@ -116,6 +119,7 @@ template <> struct KernelTrait<float, lbmpy::Arch::CPU> {
   using PackInfoPdf = pystencils::PackInfoPdfSinglePrecision;
   using PackInfoVec = pystencils::PackInfoVecSinglePrecision;
   using InitialPDFsSetterTwoComponent = pystencils::ColorGradientInitialPDFsSetterSinglePrecision;
+  using UpdateMacroscopicFromPDFTwoComponent = pystencils::ColorGradientUpdateMacroscopicFromPDFSinglePrecision;
   using DynamicUBB = lbm::DynamicUBBSinglePrecision;
   using DynamicUBBTwoComponent = lbm::DynamicUBBColorGradientSinglePrecision;
 };

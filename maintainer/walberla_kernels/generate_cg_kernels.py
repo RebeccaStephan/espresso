@@ -26,7 +26,7 @@ import pystencils as ps
 import lbmpy
 import lbmpy.boundaries
 
-kernel_codes = "cg_init cg_stream cg_collide cg_boundary".split()
+kernel_codes = "cg_init cg_stream cg_collide cg_macroscopic cg_boundary".split()
 parser = argparse.ArgumentParser(description="Generate the waLBerla kernels.")
 parser.add_argument("--single-precision", action="store_true", required=False,
                     help="Use single-precision")
@@ -127,6 +127,16 @@ def generate_cg_stream_kernels(ctx, cg_fields, cg_methods, cg_configs, cg_opts):
         ctx.patch_file(stem, get_ext_source(target_suffix), patch_openmp_kernels)
 
 
+def generate_cg_macroscopic_kernels(ctx, cg_fields, cg_methods, cg_configs):
+    precision_prefix = pystencils_espresso.precision_prefix[ctx.double_accuracy]
+    update = color_gradient.create_macroscopic_update_operator(
+        cg_fields, cg_methods, cg_configs)
+    for params, target_suffix in paramlist(parameters, ("GPU", "CPU")):
+        stem = f"ColorGradientUpdateMacroscopicFromPDF{precision_prefix}{target_suffix}"
+        pystencils_walberla.generate_sweep(ctx, stem, update, **params)
+        ctx.patch_file(stem, get_ext_source(target_suffix), patch_openmp_kernels)
+
+
 def generate_cg_boundary_kernels(ctx, cg_methods, data_type):
     precision_prefix = pystencils_espresso.precision_prefix[ctx.double_accuracy]
     # Both color components share the same stencil and the same
@@ -207,5 +217,7 @@ with code_generation_context.CodeGeneration() as ctx:
         generate_cg_stream_kernels(ctx, cg_fields, cg_methods, cg_configs, cg_opts)
     if "cg_collide" in args.kernels:
         generate_cg_collide_kernels(ctx, cg_fields, cg_methods, cg_configs, cg_opts, cg_fluctuations)
+    if "cg_macroscopic" in args.kernels:
+        generate_cg_macroscopic_kernels(ctx, cg_fields, cg_methods, cg_configs)
     if "cg_boundary" in args.kernels:
         generate_cg_boundary_kernels(ctx, cg_methods, data_type)

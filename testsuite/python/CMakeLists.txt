@@ -303,6 +303,9 @@ python_test(FILE lb_color_gradient_solvation_momentum.py MAX_NUM_PROC 1
             GPU_SLOTS 1)
 python_test(FILE lb_color_gradient_solvation_momentum.py MAX_NUM_PROC 2
             GPU_SLOTS 2 SUFFIX 2_ranks)
+python_test(FILE lb_color_gradient_sc_parity.py MAX_NUM_PROC 1 GPU_SLOTS 1)
+python_test(FILE lb_color_gradient_sc_parity.py MAX_NUM_PROC 2 GPU_SLOTS 2
+            SUFFIX 2_ranks)
 python_test(FILE fluctuating_cg.py MAX_NUM_PROC 1 GPU_SLOTS 1)
 python_test(FILE lb_color_gradient_checkpoint.py MAX_NUM_PROC 4 GPU_SLOTS 3)
 python_test(FILE lb_density_api_deprecation.py MAX_NUM_PROC 1 GPU_SLOTS 1)
