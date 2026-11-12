@@ -295,6 +295,13 @@ class LangevinThermostat(ut.TestCase):
             np.testing.assert_allclose(
                 np.copy(physical.omega_body), np.zeros(3), atol=1e-12)
 
+    def test_exceptions(self):
+        with self.assertRaisesRegex(RuntimeError, "Unknown method unknown"):
+            self.assertIsNone(self.system.thermostat.call_method(
+                "unknown"))
+        self.assertIsNone(self.system.thermostat.langevin.call_method(
+            "unknown"))
+
     @utx.skipIfMissingFeatures(["VIRTUAL_SITES_RELATIVE", "WALBERLA"])
     def test_virtual_sites_relative(self):
         Propagation = espressomd.propagation.Propagation
